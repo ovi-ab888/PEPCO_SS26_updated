@@ -112,6 +112,7 @@ div[data-testid="stNumberInput"] input{
 """
 st.markdown(THEME_CSS, unsafe_allow_html=True)
 
+
 # ==================== HELPER FUNCTIONS ====================
 
 @st.cache_data(ttl=600)
