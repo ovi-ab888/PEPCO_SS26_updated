@@ -75,8 +75,6 @@ with left:
 
 # ==================== PAGE layout ====================
 
-# ==================== PAGE layout ====================
-
 # —— Global polish CSS (must live inside a triple-quoted string) ——
 THEME_CSS = """
 <style>
@@ -106,68 +104,94 @@ div[data-testid="stVerticalBlock"]:has(> div[data-testid="stDataEditor"]){
 
 /* Labels */
 label, .stMultiSelect label, .stSelectbox label, .stNumberInput label, .stTextInput label{
-  color:var(--txt)!important; font-weight:500;
+  color:var(--txt)!important; font-weight:500; margin-bottom: 0.2rem !important;
 }
 
-/* Text/number/textarea */
+/* Text/number/textarea - Very compact */
 input, textarea{
   color:var(--txt)!important;
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
-  padding: 0.4rem 0.8rem !important;
-  height: 38px !important;
-  font-size: 14px !important;
+  padding: 0.3rem 0.6rem !important;
+  height: 32px !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
 }
-input::placeholder, textarea::placeholder{ color:var(--muted)!important; opacity:.95; }
+input::placeholder, textarea::placeholder{ color:var(--muted)!important; opacity:.95; font-size: 12px !important; }
 
-/* Select & multiselect */
+/* Select & multiselect - Very compact */
 div[data-baseweb="select"] > div{
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
-  border-radius:12px!important;
-  padding: 0.4rem 0.8rem !important;
-  height: 38px !important;
+  border-radius:10px!important;
+  padding: 0.3rem 0.6rem !important;
+  height: 32px !important;
+  min-height: unset !important;
 }
 div[data-baseweb="select"] input{ 
   color:var(--txt)!important;
   padding: 0 !important;
-  font-size: 14px !important;
+  font-size: 13px !important;
+  height: 20px !important;
 }
-div[data-baseweb="select"] svg{ opacity:.9; }
+div[data-baseweb="select"] svg{ 
+  opacity:.9; 
+  width: 16px !important;
+  height: 16px !important;
+}
 
-/* Number input inner field */
+/* Number input inner field - Very compact */
 div[data-testid="stNumberInput"] input{
   color:var(--txt)!important;
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
-  padding: 0.4rem 0.8rem !important;
-  height: 38px !important;
-  font-size: 14px !important;
-}
-
-/* Buttons - Smaller size */
-.stButton > button{ 
-  border-radius:10px; 
-  padding:0.35rem 0.8rem !important;
-  height: 34px !important;
+  padding: 0.3rem 0.6rem !important;
+  height: 32px !important;
   font-size: 13px !important;
-  min-height: unset !important;
 }
 
-/* Table spacing */
-[data-testid="stTable"] td,[data-testid="stTable"] th{ padding:.35rem .5rem; font-size: 13px; }
-
-/* Make multiselect chips smaller */
-[data-baseweb="tag"] {
-  padding: 0.2rem 0.4rem !important;
-  margin: 0.1rem !important;
+/* Buttons - Very small size */
+.stButton > button{ 
+  border-radius:8px; 
+  padding:0.25rem 0.6rem !important;
+  height: 28px !important;
   font-size: 12px !important;
-  height: 24px !important;
+  min-height: unset !important;
+  line-height: 1 !important;
 }
 
-/* Reduce spacing in form elements */
+/* Table spacing - Compact */
+[data-testid="stTable"] td,[data-testid="stTable"] th{ 
+  padding:.25rem .4rem; 
+  font-size: 12px; 
+  line-height: 1.1;
+}
+
+/* Make multiselect chips very small */
+[data-baseweb="tag"] {
+  padding: 0.15rem 0.3rem !important;
+  margin: 0.1rem !important;
+  font-size: 11px !important;
+  height: 20px !important;
+  line-height: 1 !important;
+}
+
+/* Reduce spacing in form elements to minimum */
 .stTextInput, .stSelectbox, .stMultiSelect, .stNumberInput {
-  margin-bottom: 0.5rem !important;
+  margin-bottom: 0.3rem !important;
+}
+
+/* Compact file uploader */
+[data-testid="stFileUploader"] {
+  padding: 8px 10px !important;
+}
+[data-testid="stFileUploader"] label {
+  margin-bottom: 0.3rem !important;
+}
+
+/* Compact columns */
+.stColumn {
+  padding: 0.2rem !important;
 }
 </style>
 """
