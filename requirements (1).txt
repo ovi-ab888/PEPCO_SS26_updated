@@ -8,3 +8,8 @@ streamlit-login-auth-ui
 streamlit
 pymupdf
 pandas
+streamlit
+pandas
+PyMuPDF
+openpyxl
+reportlab
