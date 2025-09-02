@@ -531,46 +531,18 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     key="pepco_material_select"
                 )
 
-               # Material composition input for each selected material
-# Material composition input for each selected material
-if selected_materials:
-    st.subheader("Material Composition (%)")
-    material_compositions_input = {}
-    
-    for i, material in enumerate(selected_materials):
-        # Create two columns for same line layout
-        col1, col2 = st.columns([2, 3])
-        
-        with col1:
-            # Material name (disabled)
-            st.text_input(
-                f"Material {i+1}",
-                value=material,
-                disabled=True,
-                key=f"mat_{i}_display",
-                label_visibility="collapsed"  # Hide label
-            )
-        
-        with col2:
-            # Composition input
-            composition = st.text_input(
-                f"Composition for {material} (%)",
-                placeholder="e.g., 100 or 90 cotton 10 elastane",
-                key=f"mat_{i}_comp",
-                label_visibility="collapsed"  # Hide label
-            )
-            material_compositions_input[material] = composition
-    
-    # Add invisible labels for accessibility
-    st.markdown(
-        f"""
-        <div style="display: none;">
-            <label>Material Names</label>
-            <label>Composition Inputs</label>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+                # Material composition input for each selected material
+                if selected_materials:
+                    st.subheader("Material Composition (%)")
+                    material_compositions_input = {}
+                    
+                    for i, material in enumerate(selected_materials):
+                        composition = st.text_input(
+                            f"Composition for {material} (%)",
+                            placeholder="e.g., 100 or 90 cotton 10 elastane",
+                            key=f"mat_{i}_comp"
+                        )
+                        material_compositions_input[material] = composition
 
                     # Create composition text for each language - PERCENTAGE FIRST
                     for lang in ['AL', 'BG', 'MK', 'RS']:
@@ -710,7 +682,6 @@ if selected_materials:
                     )
                 else:
                     st.warning("Processing stopped - valid PLN price not found")
-
 
 
 def pepco_section():
