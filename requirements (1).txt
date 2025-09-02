@@ -1,0 +1,10 @@
+streamlit
+pandas
+PyMuPDF==1.22.5
+openpyxl
+gspread
+oauth2client
+streamlit-login-auth-ui
+streamlit
+pymupdf
+pandas
