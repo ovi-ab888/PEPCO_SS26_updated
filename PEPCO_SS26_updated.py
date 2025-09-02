@@ -88,115 +88,152 @@ THEME_CSS = """
 }
 
 /* Container width + vertical rhythm */
-.block-container{max-width:1120px; padding-top:1rem; padding-bottom:3rem;}
+.block-container{max-width:1120px; padding-top:0.5rem; padding-bottom:2rem;}
 
 /* Headings */
-h1,h2,h3{font-weight:700;}
-h1{letter-spacing:.2px;} h2,h3{letter-spacing:.1px;}
+h1,h2,h3{font-weight:600; margin-bottom:0.5rem !important;}
+h1{font-size:1.8rem !important; letter-spacing:.1px;} 
+h2{font-size:1.4rem !important;}
+h3{font-size:1.1rem !important;}
 
 /* Card look for big widgets */
 section[data-testid="stFileUploader"],
 div[data-testid="stDataFrameContainer"],
 div[data-testid="stVerticalBlock"]:has(> div[data-testid="stDataEditor"]){
   background:var(--card-bg)!important; border:1px solid var(--card-br)!important;
-  border-radius:14px!important; padding:12px 14px; box-shadow:0 1px 8px rgba(0,0,0,.12);
+  border-radius:10px!important; padding:8px 10px; box-shadow:0 1px 6px rgba(0,0,0,.10);
+  margin-bottom:0.8rem !important;
 }
 
-/* Labels */
+/* Labels - Very light weight */
 label, .stMultiSelect label, .stSelectbox label, .stNumberInput label, .stTextInput label{
-  color:var(--txt)!important; font-weight:500; margin-bottom: 0.2rem !important;
+  color:var(--txt)!important; 
+  font-weight:400 !important; 
+  margin-bottom: 0.1rem !important;
+  font-size: 12px !important;
 }
 
-/* Text/number/textarea - Very compact */
+/* Text/number/textarea - Ultra compact */
 input, textarea{
   color:var(--txt)!important;
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
-  padding: 0.3rem 0.6rem !important;
-  height: 32px !important;
-  font-size: 13px !important;
-  line-height: 1.2 !important;
+  padding: 0.2rem 0.5rem !important;
+  height: 28px !important;
+  font-size: 12px !important;
+  line-height: 1.1 !important;
+  font-weight: 300 !important;
 }
-input::placeholder, textarea::placeholder{ color:var(--muted)!important; opacity:.95; font-size: 12px !important; }
+input::placeholder, textarea::placeholder{ 
+  color:var(--muted)!important; 
+  opacity:.9; 
+  font-size: 11px !important;
+  font-weight: 300 !important;
+}
 
-/* Select & multiselect - Very compact */
+/* Select & multiselect - Ultra compact */
 div[data-baseweb="select"] > div{
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
-  border-radius:10px!important;
-  padding: 0.3rem 0.6rem !important;
-  height: 32px !important;
+  border-radius:8px!important;
+  padding: 0.2rem 0.5rem !important;
+  height: 28px !important;
   min-height: unset !important;
 }
 div[data-baseweb="select"] input{ 
   color:var(--txt)!important;
   padding: 0 !important;
-  font-size: 13px !important;
-  height: 20px !important;
+  font-size: 12px !important;
+  height: 18px !important;
+  font-weight: 300 !important;
 }
 div[data-baseweb="select"] svg{ 
-  opacity:.9; 
-  width: 16px !important;
-  height: 16px !important;
+  opacity:.8; 
+  width: 14px !important;
+  height: 14px !important;
 }
 
-/* Number input inner field - Very compact */
+/* Number input inner field - Ultra compact */
 div[data-testid="stNumberInput"] input{
   color:var(--txt)!important;
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
-  padding: 0.3rem 0.6rem !important;
-  height: 32px !important;
-  font-size: 13px !important;
-}
-
-/* Buttons - Very small size */
-.stButton > button{ 
-  border-radius:8px; 
-  padding:0.25rem 0.6rem !important;
+  padding: 0.2rem 0.5rem !important;
   height: 28px !important;
   font-size: 12px !important;
+  font-weight: 300 !important;
+}
+
+/* Buttons - Ultra small and light */
+.stButton > button{ 
+  border-radius:6px; 
+  padding:0.2rem 0.5rem !important;
+  height: 26px !important;
+  font-size: 11px !important;
   min-height: unset !important;
   line-height: 1 !important;
+  font-weight: 300 !important;
 }
 
-/* Table spacing - Compact */
+/* Table spacing - Ultra compact */
 [data-testid="stTable"] td,[data-testid="stTable"] th{ 
-  padding:.25rem .4rem; 
-  font-size: 12px; 
-  line-height: 1.1;
+  padding:.2rem .3rem; 
+  font-size: 11px; 
+  line-height: 1;
+  font-weight: 300 !important;
 }
 
-/* Make multiselect chips very small */
+/* Make multiselect chips ultra small */
 [data-baseweb="tag"] {
-  padding: 0.15rem 0.3rem !important;
-  margin: 0.1rem !important;
-  font-size: 11px !important;
-  height: 20px !important;
+  padding: 0.1rem 0.25rem !important;
+  margin: 0.08rem !important;
+  font-size: 10px !important;
+  height: 18px !important;
   line-height: 1 !important;
+  font-weight: 300 !important;
 }
 
-/* Reduce spacing in form elements to minimum */
+/* Reduce spacing in form elements to absolute minimum */
 .stTextInput, .stSelectbox, .stMultiSelect, .stNumberInput {
-  margin-bottom: 0.3rem !important;
+  margin-bottom: 0.2rem !important;
 }
 
 /* Compact file uploader */
 [data-testid="stFileUploader"] {
-  padding: 8px 10px !important;
+  padding: 6px 8px !important;
 }
 [data-testid="stFileUploader"] label {
-  margin-bottom: 0.3rem !important;
+  margin-bottom: 0.2rem !important;
+  font-size: 11px !important;
 }
 
-/* Compact columns */
+/* Compact columns with minimal padding */
 .stColumn {
-  padding: 0.2rem !important;
+  padding: 0.1rem !important;
+}
+
+/* Reduce vertical spacing everywhere */
+div[data-testid="stVerticalBlock"] > div {
+  padding: 0.1rem 0 !important;
+}
+
+/* Make all text lighter */
+* {
+  font-weight: 300 !important;
+}
+
+/* Specific lighter weights for different elements */
+h1, h2, h3 {
+  font-weight: 400 !important;
+}
+
+/* Reduce spacing between form elements */
+div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] {
+  gap: 0.3rem !important;
 }
 </style>
 """
 st.markdown(THEME_CSS, unsafe_allow_html=True)
-
 
 
 # ==================== HELPER FUNCTIONS ====================
