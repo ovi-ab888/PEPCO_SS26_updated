@@ -11,6 +11,53 @@ from datetime import datetime, timedelta
 import os
 import requests.utils
 
+import os
+import streamlit as st
+
+def check_password() -> bool:
+    """
+    Returns True if user is authenticated.
+    Looks for password in (1) st.secrets["app_password"] (2) env var APP_PASSWORD.
+    Falls back to a fixed string only if nothing is configured (optional).
+    """
+    # 1) prefer Streamlit Secrets
+    secret_pw = None
+    try:
+        # st.secrets raises KeyError if missing key; also handles cloud secrets
+        secret_pw = st.secrets.get("app_password", None)
+    except Exception:
+        secret_pw = None
+
+    # 2) fallback to environment variable
+    if not secret_pw:
+        secret_pw = os.getenv("APP_PASSWORD")
+
+    # 3) (optional) last-resort fallback during local dev
+    # secret_pw = secret_pw or "changeme123"
+
+    # UI
+    st.sidebar.subheader("🔐 Login")
+    typed = st.sidebar.text_input("Password", type="password", key="__pepco_pw")
+
+    # already authed this session?
+    if st.session_state.get("__pepco_authed") is True:
+        return True
+
+    # if no password configured, allow without check (or block — your choice)
+    if not secret_pw:
+        st.sidebar.info("No app password configured.")
+        # return True  # uncomment to allow app without password
+        return True
+
+    if typed and typed == str(secret_pw):
+        st.session_state["__pepco_authed"] = True
+        st.sidebar.success("Logged in ✅")
+        return True
+
+    if typed and typed != str(secret_pw):
+        st.sidebar.error("Wrong password ❌")
+
+    return False
 
 
 
