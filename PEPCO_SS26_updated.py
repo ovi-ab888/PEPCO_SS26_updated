@@ -75,6 +75,8 @@ with left:
 
 # ==================== PAGE layout ====================
 
+# ==================== PAGE layout ====================
+
 # —— Global polish CSS (must live inside a triple-quoted string) ——
 THEME_CSS = """
 <style>
@@ -112,6 +114,9 @@ input, textarea{
   color:var(--txt)!important;
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
+  padding: 0.4rem 0.8rem !important;
+  height: 38px !important;
+  font-size: 14px !important;
 }
 input::placeholder, textarea::placeholder{ color:var(--muted)!important; opacity:.95; }
 
@@ -120,8 +125,14 @@ div[data-baseweb="select"] > div{
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
   border-radius:12px!important;
+  padding: 0.4rem 0.8rem !important;
+  height: 38px !important;
 }
-div[data-baseweb="select"] input{ color:var(--txt)!important; }
+div[data-baseweb="select"] input{ 
+  color:var(--txt)!important;
+  padding: 0 !important;
+  font-size: 14px !important;
+}
 div[data-baseweb="select"] svg{ opacity:.9; }
 
 /* Number input inner field */
@@ -129,13 +140,35 @@ div[data-testid="stNumberInput"] input{
   color:var(--txt)!important;
   background:var(--input-bg)!important;
   border-color:var(--input-br)!important;
+  padding: 0.4rem 0.8rem !important;
+  height: 38px !important;
+  font-size: 14px !important;
 }
 
-/* Buttons */
-.stButton > button{ border-radius:12px; padding:.55rem 1rem; }
+/* Buttons - Smaller size */
+.stButton > button{ 
+  border-radius:10px; 
+  padding:0.35rem 0.8rem !important;
+  height: 34px !important;
+  font-size: 13px !important;
+  min-height: unset !important;
+}
 
 /* Table spacing */
-[data-testid="stTable"] td,[data-testid="stTable"] th{ padding:.45rem .6rem; }
+[data-testid="stTable"] td,[data-testid="stTable"] th{ padding:.35rem .5rem; font-size: 13px; }
+
+/* Make multiselect chips smaller */
+[data-baseweb="tag"] {
+  padding: 0.2rem 0.4rem !important;
+  margin: 0.1rem !important;
+  font-size: 12px !important;
+  height: 24px !important;
+}
+
+/* Reduce spacing in form elements */
+.stTextInput, .stSelectbox, .stMultiSelect, .stNumberInput {
+  margin-bottom: 0.5rem !important;
+}
 </style>
 """
 st.markdown(THEME_CSS, unsafe_allow_html=True)
