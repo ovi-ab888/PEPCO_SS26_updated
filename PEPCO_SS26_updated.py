@@ -596,50 +596,60 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 key="pepco_product_select"
             )
 
-            if not material_translations_df.empty:
-                materials = material_translations_df['material'].dropna().unique().tolist()
-                selected_materials = st.multiselect(
-                    "Select Material(s)",
-                    options=materials,
-                    key="pepco_material_select"
+# --- Material select + Composition % inputs ---
+if not material_translations_df.empty:
+    materials = material_translations_df['material'].dropna().unique().tolist()
+
+    selected_materials = st.multiselect(
+        "Select Material(s)",
+        options=materials,
+        key="pepco_material_select"
+    )
+
+    composition_pairs = []
+    if selected_materials:
+        st.caption("Enter composition percentages (must sum to 100%)")
+        cols = st.columns(min(4, len(selected_materials)))
+        for i, m in enumerate(selected_materials):
+            with cols[i % len(cols)]:
+                pct = st.number_input(
+                    f"% {m}",
+                    min_value=0,
+                    max_value=100,
+                    value=0,
+                    step=1,
+                    key=f"pct_{m}"
                 )
+            composition_pairs.append((m, pct))
 
-                norm_materials = []
+        total_pct = sum(p for _, p in composition_pairs)
+        if total_pct != 100:
+            st.warning(f"⚠️ Composition total is {total_pct}%. It should be 100%.")
+        else:
+            st.success("✅ Composition OK (100%)")
 
-                for _m in (selected_materials or []):
+    # Translation build
+    def get_translation(mat, lang):
+        t = material_translations_df[
+            (material_translations_df['material'] == mat) &
+            (material_translations_df['language'] == lang)
+        ]
+        return (t['translation'].iloc[0]
+                if not t.empty and pd.notna(t['translation'].iloc[0])
+                else mat)
 
-                    try:
+    composition_texts = {}
+    if selected_materials:
+        en_parts = [f"{pct}% {mat.lower()}" for mat, pct in composition_pairs if pct > 0]
+        composition_texts['EN'] = " ".join(en_parts).strip()
+        for lang in ['AL', 'BG', 'MK', 'RS']:
+            parts = [f"{pct}% {get_translation(mat, lang)}"
+                     for mat, pct in composition_pairs if pct > 0]
+            composition_texts[lang] = " ".join(parts).strip()
+else:
+    selected_materials = None
+    composition_texts = None
 
-                        s = str(_m).strip()
-
-                        if s:
-
-                            norm_materials.append(s.lower())
-
-                    except Exception:
-
-                        pass
-
-
-
-                cotton_value = "Y" if (len(norm_materials) == 1 and norm_materials[0] == "cotton") else ""
-
-                material_trans_dict = {}
-                for lang in ['AL', 'BG', 'MK', 'RS']:
-                    trans_list = []
-                    for material in selected_materials:
-                        trans = material_translations_df[
-                            (material_translations_df['material'] == material) &
-                            (material_translations_df['language'] == lang)
-                        ]
-                        if not trans.empty:
-                            trans_list.append(trans['translation'].iloc[0])
-                    if trans_list:
-                        material_trans_dict[lang] = ", ".join(trans_list)
-            else:
-                selected_materials = None
-                material_trans_dict = None
-                cotton_value = ""
 
             washing_code = st.selectbox(
                 "Select Washing Code",
