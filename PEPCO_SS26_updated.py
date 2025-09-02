@@ -1,3 +1,45 @@
+# ==================== PASSWORD ====================
+
+# -*- coding: utf-8 -*-
+import streamlit as st
+
+# --- Simple password gate (set in .streamlit/secrets.toml as app_password or env PEPCO_APP_PASSWORD) ---
+import os
+
+def check_password():
+    expected = None
+    # Prefer Streamlit secrets
+    try:
+        expected = st.secrets.get("app_password", None)
+    except Exception:
+        expected = None
+    # Fallback to environment variable
+    if expected is None:
+        expected = os.environ.get("PEPCO_APP_PASSWORD")
+
+    if expected is None:
+        st.error("App password not configured. Set 'app_password' in .streamlit/secrets.toml or PEPCO_APP_PASSWORD env var.")
+        return False
+
+    def _password_entered():
+        if st.session_state.get("password") == expected:
+            st.session_state["password_correct"] = True
+            try:
+                del st.session_state["password"]
+            except Exception:
+                pass
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct", None) is True:
+        return True
+
+    st.text_input("Password", type="password", key="password", on_change=_password_entered)
+    if st.session_state.get("password_correct") is False:
+        st.error("Your password Incorrect,  Please contact Mr. Ovi")
+    return False
+# --- End password gate ---
+
 # ==================== PAGE CONFIG (MUST BE FIRST) ====================
 import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
@@ -691,7 +733,8 @@ COLLECTION_MAPPING = {
 
 def main():
     st.title("PEPCO Automation App")
-    # Password check bypassed for local run
+    if not check_password():
+        st.stop()
     pepco_section()
 
 if __name__ == "__main__":
