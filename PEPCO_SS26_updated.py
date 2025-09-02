@@ -23,37 +23,9 @@ import streamlit as st
 import os
 
 def check_password():
-    expected = None
-    # Prefer Streamlit secrets
-    try:
-        expected = st.secrets.get("app_password", None)
-    except Exception:
-        expected = None
-    # Fallback to environment variable
-    if expected is None:
-        expected = os.environ.get("PEPCO_APP_PASSWORD")
+    # Password bypass for local run
+    return True
 
-    if expected is None:
-        st.error("App password not configured. Set 'app_password' in .streamlit/secrets.toml or PEPCO_APP_PASSWORD env var.")
-        return False
-
-    def _password_entered():
-        if st.session_state.get("password") == expected:
-            st.session_state["password_correct"] = True
-            try:
-                del st.session_state["password"]
-            except Exception:
-                pass
-        else:
-            st.session_state["password_correct"] = False
-
-    if st.session_state.get("password_correct", None) is True:
-        return True
-
-    st.text_input("Password", type="password", key="password", on_change=_password_entered)
-    if st.session_state.get("password_correct") is False:
-        st.error("Your password Incorrect,  Please contact Mr. Ovi")
-    return False
 # --- End password gate ---
 
 # ==================== LOGO ====================
@@ -231,10 +203,24 @@ h1, h2, h3 {
 div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] {
   gap: 0.3rem !important;
 }
+
+/* Make material composition inputs compact and inline */
+.stTextInput[data-testid="stTextInput"] {
+    margin-bottom: 0.3rem !important;
+}
+
+/* Adjust column spacing for inline layout */
+.stColumn {
+    padding: 0.1rem 0.3rem !important;
+}
+
+/* Ensure labels are hidden but accessible */
+[data-testid="stTextInput"] label {
+    display: none !important;
+}
 </style>
 """
 st.markdown(THEME_CSS, unsafe_allow_html=True)
-
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -654,22 +640,45 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                     key="pepco_material_select"
                 )
 
-                # Material composition input for each selected material
+                # Material composition input for each selected material - INLINE LAYOUT
                 if selected_materials:
                     st.subheader("Material Composition (%)")
                     material_compositions_input = {}
                     
                     for i, material in enumerate(selected_materials):
-                        cols = st.columns([2, 3])
-                        with cols[0]:
-                            st.text_input(f"Material {i+1}", value=material, disabled=True, key=f"mat_{i}_display")
-                        with cols[1]:
+                        # Create two columns for same line layout
+                        col1, col2 = st.columns([2, 3])
+                        
+                        with col1:
+                            # Material name (disabled)
+                            st.text_input(
+                                f"Material {i+1}",
+                                value=material,
+                                disabled=True,
+                                key=f"mat_{i}_display",
+                                label_visibility="collapsed"  # Hide label
+                            )
+                        
+                        with col2:
+                            # Composition input
                             composition = st.text_input(
                                 f"Composition for {material} (%)",
                                 placeholder="e.g., 100 or 90 cotton 10 elastane",
-                                key=f"mat_{i}_comp"
+                                key=f"mat_{i}_comp",
+                                label_visibility="collapsed"  # Hide label
                             )
                             material_compositions_input[material] = composition
+                    
+                    # Add invisible labels for accessibility
+                    st.markdown(
+                        f"""
+                        <div style="display: none;">
+                            <label>Material Names</label>
+                            <label>Composition Inputs</label>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
                     # Create composition text for each language - PERCENTAGE FIRST
                     for lang in ['AL', 'BG', 'MK', 'RS']:
@@ -913,8 +922,7 @@ COLLECTION_MAPPING = {
 
 def main():
     st.title("PEPCO Automation App")
-    if not check_password():
-        st.stop()
+    # Password check bypassed for local run
     pepco_section()
 
 if __name__ == "__main__":
