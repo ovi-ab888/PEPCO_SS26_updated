@@ -1,3 +1,19 @@
+# ==================== PAGE CONFIG (MUST BE FIRST) ====================
+import streamlit as st
+st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
+
+# ==================== import ====================
+
+import fitz  # PyMuPDF
+import pandas as pd
+import re
+import csv
+from io import StringIO
+import csv as pycsv
+from datetime import datetime, timedelta
+import os
+import requests.utils
+
 # ==================== PASSWORD ====================
 
 # -*- coding: utf-8 -*-
@@ -40,21 +56,91 @@ def check_password():
     return False
 # --- End password gate ---
 
-# ==================== PAGE CONFIG (MUST BE FIRST) ====================
-import streamlit as st
-st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
-
-# ==================== import ====================
-
-import fitz  # PyMuPDF
-import pandas as pd
-import re
-import csv
-from io import StringIO
-import csv as pycsv
-from datetime import datetime, timedelta
+# ==================== LOGO ====================
 import os
-import requests.utils
+
+# repo root e rakha logo gulo
+LOGO_PNG = "logo.png"   # (thakle use korbo)
+LOGO_SVG = "logo.svg"   # tumi jeita add korecho
+
+# Header: logo + title
+left, right = st.columns([3, 10], vertical_alignment="center")
+with left:
+    if os.path.exists(LOGO_SVG):
+        st.image(LOGO_SVG, width=300)       # prefer svg in header
+    elif os.path.exists(LOGO_PNG):
+        st.image(LOGO_PNG, width=300)
+    else:
+        st.markdown("<div style='font-size:40px'>🏷️</div>", unsafe_allow_html=True)
+
+# ==================== PAGE layout ====================
+
+# —— Global polish CSS (must live inside a triple-quoted string) ——
+THEME_CSS = """
+<style>
+:root{
+  --card-bg: rgba(255,255,255,.04);
+  --card-br: rgba(255,255,255,.12);
+  --input-bg: rgba(255,255,255,.08);
+  --input-br: rgba(255,255,255,.25);
+  --txt:      #E9ECF6;
+  --muted:    #C2C8DF;
+}
+
+/* Container width + vertical rhythm */
+.block-container{max-width:1120px; padding-top:1rem; padding-bottom:3rem;}
+
+/* Headings */
+h1,h2,h3{font-weight:700;}
+h1{letter-spacing:.2px;} h2,h3{letter-spacing:.1px;}
+
+/* Card look for big widgets */
+section[data-testid="stFileUploader"],
+div[data-testid="stDataFrameContainer"],
+div[data-testid="stVerticalBlock"]:has(> div[data-testid="stDataEditor"]){
+  background:var(--card-bg)!important; border:1px solid var(--card-br)!important;
+  border-radius:14px!important; padding:12px 14px; box-shadow:0 1px 8px rgba(0,0,0,.12);
+}
+
+/* Labels */
+label, .stMultiSelect label, .stSelectbox label, .stNumberInput label, .stTextInput label{
+  color:var(--txt)!important; font-weight:500;
+}
+
+/* Text/number/textarea */
+input, textarea{
+  color:var(--txt)!important;
+  background:var(--input-bg)!important;
+  border-color:var(--input-br)!important;
+}
+input::placeholder, textarea::placeholder{ color:var(--muted)!important; opacity:.95; }
+
+/* Select & multiselect */
+div[data-baseweb="select"] > div{
+  background:var(--input-bg)!important;
+  border-color:var(--input-br)!important;
+  border-radius:12px!important;
+}
+div[data-baseweb="select"] input{ color:var(--txt)!important; }
+div[data-baseweb="select"] svg{ opacity:.9; }
+
+/* Number input inner field */
+div[data-testid="stNumberInput"] input{
+  color:var(--txt)!important;
+  background:var(--input-bg)!important;
+  border-color:var(--input-br)!important;
+}
+
+/* Buttons */
+.stButton > button{ border-radius:12px; padding:.55rem 1rem; }
+
+/* Table spacing */
+[data-testid="stTable"] td,[data-testid="stTable"] th{ padding:.45rem .6rem; }
+</style>
+"""
+st.markdown(THEME_CSS, unsafe_allow_html=True)
+
+
 
 # ==================== HELPER FUNCTIONS ====================
 
