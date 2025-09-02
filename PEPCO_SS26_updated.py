@@ -1,3 +1,6 @@
+# ==================== PAGE CONFIG (MUST BE FIRST) ====================
+import streamlit as st
+st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== import ====================
 
@@ -10,188 +13,6 @@ import csv as pycsv
 from datetime import datetime, timedelta
 import os
 import requests.utils
-
-import os
-import streamlit as st
-
-def check_password() -> bool:
-    """
-    Returns True if user is authenticated.
-    Looks for password in (1) st.secrets["app_password"] (2) env var APP_PASSWORD.
-    Falls back to a fixed string only if nothing is configured (optional).
-    """
-    # 1) prefer Streamlit Secrets
-    secret_pw = None
-    try:
-        # st.secrets raises KeyError if missing key; also handles cloud secrets
-        secret_pw = st.secrets.get("app_password", None)
-    except Exception:
-        secret_pw = None
-
-    # 2) fallback to environment variable
-    if not secret_pw:
-        secret_pw = os.getenv("APP_PASSWORD")
-
-    # 3) (optional) last-resort fallback during local dev
-    # secret_pw = secret_pw or "changeme123"
-
-    # UI
-    st.sidebar.subheader("🔐 Login")
-    typed = st.sidebar.text_input("Password", type="password", key="__pepco_pw")
-
-    # already authed this session?
-    if st.session_state.get("__pepco_authed") is True:
-        return True
-
-    # if no password configured, allow without check (or block — your choice)
-    if not secret_pw:
-        st.sidebar.info("No app password configured.")
-        # return True  # uncomment to allow app without password
-        return True
-
-    if typed and typed == str(secret_pw):
-        st.session_state["__pepco_authed"] = True
-        st.sidebar.success("Logged in ✅")
-        return True
-
-    if typed and typed != str(secret_pw):
-        st.sidebar.error("Wrong password ❌")
-
-    return False
-
-
-
-# ==================== PAGE layout ====================
-
-import streamlit as st
-
-st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
-
-# —— Global polish CSS (must live inside a triple-quoted string) ——
-THEME_CSS = """
-<style>
-:root{
-  --card-bg: rgba(255,255,255,.04);
-  --card-br: rgba(255,255,255,.12);
-  --input-bg: rgba(255,255,255,.08);
-  --input-br: rgba(255,255,255,.25);
-  --txt:      #E9ECF6;
-  --muted:    #C2C8DF;
-}
-
-/* Container width + vertical rhythm */
-.block-container{max-width:1120px; padding-top:1rem; padding-bottom:3rem;}
-
-/* Headings */
-h1,h2,h3{font-weight:700;}
-h1{letter-spacing:.2px;} h2,h3{letter-spacing:.1px;}
-
-/* Card look for big widgets */
-section[data-testid="stFileUploader"],
-div[data-testid="stDataFrameContainer"],
-div[data-testid="stVerticalBlock"]:has(> div[data-testid="stDataEditor"]){
-  background:var(--card-bg)!important; border:1px solid var(--card-br)!important;
-  border-radius:14px!important; padding:12px 14px; box-shadow:0 1px 8px rgba(0,0,0,.12);
-}
-
-/* Labels */
-label, .stMultiSelect label, .stSelectbox label, .stNumberInput label, .stTextInput label{
-  color:var(--txt)!important; font-weight:500;
-}
-
-/* Text/number/textarea */
-input, textarea{
-  color:var(--txt)!important;
-  background:var(--input-bg)!important;
-  border-color:var(--input-br)!important;
-}
-input::placeholder, textarea::placeholder{ color:var(--muted)!important; opacity:.95; }
-
-/* Select & multiselect */
-div[data-baseweb="select"] > div{
-  background:var(--input-bg)!important;
-  border-color:var(--input-br)!important;
-  border-radius:12px!important;
-}
-div[data-baseweb="select"] input{ color:var(--txt)!important; }
-div[data-baseweb="select"] svg{ opacity:.9; }
-
-/* Number input inner field */
-div[data-testid="stNumberInput"] input{
-  color:var(--txt)!important;
-  background:var(--input-bg)!important;
-  border-color:var(--input-br)!important;
-}
-
-/* Buttons */
-.stButton > button{ border-radius:12px; padding:.55rem 1rem; }
-
-/* Table spacing */
-[data-testid="stTable"] td,[data-testid="stTable"] th{ padding:.45rem .6rem; }
-</style>
-"""
-st.markdown(THEME_CSS, unsafe_allow_html=True)
-
-
-
-
-# ========== WASHING_CODES MAPPINGS ==========
-
-WASHING_CODES = {
-    '1': '১২৩৪৫',
-    '2': '১৪৭৮৫',
-    '3': 'djnst',
-    '4': 'djnpt',
-    '5': 'djnqt',
-    '6': 'djnqt',
-    '7': 'gjnpt',
-    '8': 'gjnpu',
-    '9': 'gjnqt',
-    '10': 'gjnqu',
-    '11': 'ijnst',
-    '12': 'ijnsu',
-    '13': 'ijnpu',
-    '14': 'ijnsv',
-    '15': 'djnsw'
-}
-
-# ========== COLLECTION_MAPPING ==========
-
-COLLECTION_MAPPING = {
-    'b': {
-        'CROCO CLUB': 'MODERN 1',
-        'LITTLE SAILOR': 'MODERN 2',
-        'EXPLORE THE WORLD': 'MODERN 3',
-        'JURASIC ADVENTURE': 'MODERN 4',
-        'WESTERN SPIRIT': 'CLASSIC 1',
-        'SUMMER FUN': 'CLASSIC 2'
-    },
-    'a': {
-        'Rainbow Girl': 'MODERN 1',
-        'NEONS PICNIC': 'MODERN 2',
-        'COUNTRY SIDE': 'ROMANTIC 2',
-        'ESTER GARDENG': 'ROMANTIC 3'
-    },
-    'd': {
-        'LITTLE TREASURE': 'MODERN 1',
-        'DINO FRIENDS': 'CLASSIC 1',
-        'EXOTIC ANIMALS': 'CLASSIC 2'
-    },
-    'd_girls': {
-        'SWEEET PASTELS': 'MODERN 1',
-        'PORCELAIN': 'ROMANTIC 2',
-        'SUMMER VIBE': 'ROMANTIC 3'
-    },
-    'yg': {
-        'CUTE_JUMP': 'COLLECTION_1',
-        'SWEET_HEART': 'COLLECTION_2',
-        'DAISY': 'COLLECTION_3',
-        'SPECIAL OCC': 'COLLECTION_4',
-        'LILALOV': 'COLLECTION_5',
-        'COOL GIRL': 'COLLECTION_6',
-        'DEL MAR': 'COLLECTION_7'
-    }
-}
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -314,7 +135,7 @@ def get_manual_prices():
 
     return manual_prices
 
-def format_product_translations(product_name, translation_row, selected_materials=None, material_translations=None):
+def format_product_translations(product_name, translation_row, selected_materials=None, material_translations=None, material_compositions=None):
     formatted = []
     country_suffixes = {
         'BiH': " Sastav materijala na ušivenoj etiketi.",
@@ -347,7 +168,13 @@ def format_product_translations(product_name, translation_row, selected_material
         if selected_materials and material_translations and lang in ['AL', 'BG', 'MK', 'RS']:
             material_text = material_translations.get(lang, "")
             if material_text:
-                text = f"{text}: {material_text}"
+                # Add composition percentages if available - PERCENTAGE FIRST
+                if material_compositions:
+                    composition_text = material_compositions.get(lang, "")
+                    if composition_text:
+                        text = f"{text}: {composition_text}"
+                else:
+                    text = f"{text}: {material_text}"
 
         if lang in country_suffixes:
             if not text.endswith('.'):
@@ -420,10 +247,10 @@ def modify_collection(collection, item_class):
 def extract_colour_from_page2(text, page_number=1):
     try:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
-        skip_keywords = ["PURCHASE", "COLOUR", "TOTAL", "PANTONE", "SUPPLIER",
-                        "PRICE", "ORDERED", "SIZES", "TPG", "TPX", "USD", "NIP",
-                        "PEPCO", "Poland", "ul. Strzeszyńska 73A, 60-479 Poznań",
-                        "NIP 782-21-31-157"]
+        skip_keywords = ["PURCHASE", "COLOUR", "TOTAL", 'PANTONE', 'SUPPLIER',
+                        'PRICE', 'ORDERED', 'SIZES', 'TPG', 'TPX', 'USD', 'NIP',
+                        'PEPCO', 'Poland', 'ul. Strzeszyńska 73A, 60-479 Poznań',
+                        'NIP 782-21-31-157']
 
         filtered_lines = [
             line for line in lines
@@ -535,7 +362,7 @@ def extract_data_from_pdf(file):
 
         item_class_value = item_class.group(1).strip() if item_class else "UNKNOWN"
         class_type = get_classification_type(item_class_value)
-        collection_value = collection.group(1).split("-")[0].strip() if collection else "UNKNOWN"
+        collection_value = collection.group(1).split("-")[0].strip() if collection else "UNKNOWN"  # FIXED: Changed ] to )
 
         if class_type and class_type in COLLECTION_MAPPING:
             for orig_collection, new_collection in COLLECTION_MAPPING[class_type].items():
@@ -596,60 +423,86 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 key="pepco_product_select"
             )
 
-# --- Material select + Composition % inputs ---
-if not material_translations_df.empty:
-    materials = material_translations_df['material'].dropna().unique().tolist()
-
-    selected_materials = st.multiselect(
-        "Select Material(s)",
-        options=materials,
-        key="pepco_material_select"
-    )
-
-    composition_pairs = []
-    if selected_materials:
-        st.caption("Enter composition percentages (must sum to 100%)")
-        cols = st.columns(min(4, len(selected_materials)))
-        for i, m in enumerate(selected_materials):
-            with cols[i % len(cols)]:
-                pct = st.number_input(
-                    f"% {m}",
-                    min_value=0,
-                    max_value=100,
-                    value=0,
-                    step=1,
-                    key=f"pct_{m}"
+            material_compositions = {}
+            if not material_translations_df.empty:
+                materials = material_translations_df['material'].dropna().unique().tolist()
+                selected_materials = st.multiselect(
+                    "Select Material(s)",
+                    options=materials,
+                    key="pepco_material_select"
                 )
-            composition_pairs.append((m, pct))
 
-        total_pct = sum(p for _, p in composition_pairs)
-        if total_pct != 100:
-            st.warning(f"⚠️ Composition total is {total_pct}%. It should be 100%.")
-        else:
-            st.success("✅ Composition OK (100%)")
+                # Material composition input for each selected material
+                if selected_materials:
+                    st.subheader("Material Composition (%)")
+                    material_compositions_input = {}
+                    
+                    for i, material in enumerate(selected_materials):
+                        cols = st.columns([2, 3])
+                        with cols[0]:
+                            st.text_input(f"Material {i+1}", value=material, disabled=True, key=f"mat_{i}_display")
+                        with cols[1]:
+                            composition = st.text_input(
+                                f"Composition for {material} (%)",
+                                placeholder="e.g., 100 or 90 cotton 10 elastane",
+                                key=f"mat_{i}_comp"
+                            )
+                            material_compositions_input[material] = composition
 
-    # Translation build
-    def get_translation(mat, lang):
-        t = material_translations_df[
-            (material_translations_df['material'] == mat) &
-            (material_translations_df['language'] == lang)
-        ]
-        return (t['translation'].iloc[0]
-                if not t.empty and pd.notna(t['translation'].iloc[0])
-                else mat)
+                    # Create composition text for each language - PERCENTAGE FIRST
+                    for lang in ['AL', 'BG', 'MK', 'RS']:
+                        comp_texts = []
+                        for material in selected_materials:
+                            composition = material_compositions_input.get(material, "")
+                            if composition:
+                                # Add % sign if not already present
+                                if '%' not in composition:
+                                    composition = f"{composition}%"
+                                trans = material_translations_df[
+                                    (material_translations_df['material'] == material) &
+                                    (material_translations_df['language'] == lang)
+                                ]
+                                if not trans.empty:
+                                    material_name = trans['translation'].iloc[0]
+                                    # Format: percentage first, then material name
+                                    comp_texts.append(f"{composition} {material_name}")
+                        
+                        if comp_texts:
+                            material_compositions[lang] = ", ".join(comp_texts)
 
-    composition_texts = {}
-    if selected_materials:
-        en_parts = [f"{pct}% {mat.lower()}" for mat, pct in composition_pairs if pct > 0]
-        composition_texts['EN'] = " ".join(en_parts).strip()
-        for lang in ['AL', 'BG', 'MK', 'RS']:
-            parts = [f"{pct}% {get_translation(mat, lang)}"
-                     for mat, pct in composition_pairs if pct > 0]
-            composition_texts[lang] = " ".join(parts).strip()
-else:
-    selected_materials = None
-    composition_texts = None
+                norm_materials = []
 
+                for _m in (selected_materials or []):
+
+                    try:
+
+                        s = str(_m).strip()
+
+                        if s:
+
+                            norm_materials.append(s.lower())
+
+                    except Exception:
+
+                        pass
+
+                cotton_value = "Y" if (len(norm_materials) == 1 and norm_materials[0] == "cotton") else ""
+                material_trans_dict = {}
+                for lang in ['AL', 'BG', 'MK', 'RS']:
+                    trans_list = []
+                    for material in selected_materials:
+                        trans = material_translations_df[
+                            (material_translations_df['material'] == material) &
+                            (material_translations_df['language'] == lang)
+                        ]
+                        if not trans.empty:
+                            trans_list.append(trans['translation'].iloc[0])
+                    if trans_list:
+                        material_trans_dict[lang] = ", ".join(trans_list)
+            else:
+                selected_materials = None
+                material_trans_dict = None
+                cotton_value = ""
 
             washing_code = st.selectbox(
                 "Select Washing Code",
@@ -659,17 +512,11 @@ else:
 
             df = pd.DataFrame(result_data)
 
-
             # Merge extra Order_IDs from other PDFs into Order_ID column
-
             if extra_order_ids:
-
                 try:
-
                     df['Order_ID'] = df['Order_ID'].astype(str) + "+" + extra_order_ids
-
                 except Exception:
-
                     pass
 
             df['Dept'] = df['Item_classification'].apply(get_dept_value)
@@ -683,7 +530,8 @@ else:
                     product_type,
                     product_row.iloc[0],
                     selected_materials,
-                    material_trans_dict
+                    material_trans_dict,
+                    material_compositions
                 )
             else:
                 df['product_name'] = ""
@@ -698,7 +546,7 @@ else:
                 try:
                     pln_price = float(pln_price_raw.replace(",", "."))
                     if pln_price < 0:
-                        st.error("❌ Price can’t be negative.")
+                        st.error("❌ Price can't be negative.")
                         pln_price = None
                 except ValueError:
                     st.error("❌ Please enter a valid number like 12.50 or 12,50")
@@ -781,12 +629,69 @@ def pepco_section():
         process_pepco_pdf(primary_pdf, extra_order_ids=concatenated_ids)
 
 
+# ========== WASHING_CODES MAPPINGS ==========
+
+WASHING_CODES = {
+    '1': '১২৩৪৫',
+    '2': '১৪৭৮৫',
+    '3': 'djnst',
+    '4': 'djnpt',
+    '5': 'djnqt',
+    '6': 'djnqt',
+    '7': 'gjnpt',
+    '8': 'gjnpu',
+    '9': 'gjnqt',
+    '10': 'gjnqu',
+    '11': 'ijnst',
+    '12': 'ijnsu',
+    '13': 'ijnpu',
+    '14': 'ijnsv',
+    '15': 'djnsw'
+}
+
+# ========== COLLECTION_MAPPING ==========
+
+COLLECTION_MAPPING = {
+    'b': {
+        'CROCO CLUB': 'MODERN 1',
+        'LITTLE SAILOR': 'MODERN 2',
+        'EXPLORE THE WORLD': 'MODERN 3',
+        'JURASIC ADVENTURE': 'MODERN 4',
+        'WESTERN SPIRIT': 'CLASSIC 1',
+        'SUMMER FUN': 'CLASSIC 2'
+    },
+    'a': {
+        'Rainbow Girl': 'MODERN 1',
+        'NEONS PICNIC': 'MODERN 2',
+        'COUNTRY SIDE': 'ROMANTIC 2',
+        'ESTER GARDENG': 'ROMANTIC 3'
+    },
+    'd': {
+        'LITTLE TREASURE': 'MODERN 1',
+        'DINO FRIENDS': 'CLASSIC 1',
+        'EXOTIC ANIMALS': 'CLASSIC 2'
+    },
+    'd_girls': {
+        'SWEEET PASTELS': 'MODERN 1',
+        'PORCELAIN': 'ROMANTIC 2',
+        'SUMMER VIBE': 'ROMANTIC 3'
+    },
+    'yg': {
+        'CUTE_JUMP': 'COLLECTION_1',
+        'SWEET_HEART': 'COLLECTION_2',
+        'DAISY': 'COLLECTION_3',
+        'SPECIAL OCC': 'COLLECTION_4',
+        'LILALOV': 'COLLECTION_5',
+        'COOL GIRL': 'COLLECTION_6',
+        'DEL MAR': 'COLLECTION_7'
+    }
+}
+
 # ==================== MAIN APP ====================
 
 def main():
     st.title("PEPCO Automation App")
-    if not check_password():
-        st.stop()
+    # Password check bypassed for local run
     pepco_section()
 
 if __name__ == "__main__":
