@@ -134,6 +134,36 @@ def load_material_translations():
         st.error(f"Failed to load material translations: {str(e)}")
         return pd.DataFrame()
 
+
+
+def read_pdf_text(uploaded_file) -> str:
+    """Return full text of PDF using the first available backend."""
+    # Streamlit uploads are file-like; we need to reset pointer as we read
+    pos = uploaded_file.tell()
+    uploaded_file.seek(0)
+
+    if PDF_BACKEND == "pymupdf":
+        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+        pages = [page.get_text() for page in doc]
+        doc.close()
+        text = "\n".join(pages)
+
+    elif PDF_BACKEND == "pdfplumber":
+        with pdfplumber.open(uploaded_file) as pdf:
+            pages = [(p.extract_text() or "") for p in pdf.pages]
+        text = "\n".join(pages)
+
+    else:  # pypdf
+        reader = PdfReader(uploaded_file)
+        pages = [(page.extract_text() or "") for page in reader.pages]
+        text = "\n".join(pages)
+
+    uploaded_file.seek(pos)  # restore pointer
+    return text
+
+
+
+
 # ==================== HELPERS ====================
 def format_number(value, currency):
     try:
@@ -576,6 +606,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
