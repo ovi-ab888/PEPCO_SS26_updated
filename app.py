@@ -3,7 +3,7 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
-import fitz  # PyMuPDF
+import pymupdf as fitz
 import pandas as pd
 import re
 from io import StringIO
@@ -570,3 +570,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
