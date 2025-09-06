@@ -6,3 +6,4 @@ reportlab
 requests==2.32.3
 gspread
 oauth2client
+pymupdf==1.24.10
