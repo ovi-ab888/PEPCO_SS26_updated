@@ -3,16 +3,27 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
-# ---- Robust PyMuPDF import (works in both cases) ----
+# ---- Robust PDF backends ----
+PDF_BACKEND = None
+
 try:
-    import fitz  # PyMuPDF's import name
-except ModuleNotFoundError:
+    import fitz  # PyMuPDF import name
+    PDF_BACKEND = "pymupdf"
+except Exception:
+    fitz = None
     try:
-        import pymupdf as fitz  # some envs expose module as 'pymupdf'
-    except ModuleNotFoundError:
-        import streamlit as st
-        st.error("PyMuPDF not found. Add `pymupdf==1.24.10` to requirements.txt and redeploy.")
-        st.stop()
+        import pdfplumber  # pure-Python, uses pdfminer.six
+        PDF_BACKEND = "pdfplumber"
+    except Exception:
+        pdfplumber = None
+        try:
+            from pypdf import PdfReader  # pure-Python
+            PDF_BACKEND = "pypdf"
+        except Exception:
+            PdfReader = None
+            import streamlit as st
+            st.error("No PDF backend available. Install one of: pymupdf, pdfplumber, pypdf.")
+            st.stop()
 
 import pandas as pd
 import re
@@ -565,6 +576,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
