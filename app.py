@@ -3,7 +3,17 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
-import pymupdf as fitz
+# ---- Robust PyMuPDF import (works in both cases) ----
+try:
+    import fitz  # PyMuPDF's import name
+except ModuleNotFoundError:
+    try:
+        import pymupdf as fitz  # some envs expose module as 'pymupdf'
+    except ModuleNotFoundError:
+        import streamlit as st
+        st.error("PyMuPDF not found. Add `pymupdf==1.24.10` to requirements.txt and redeploy.")
+        st.stop()
+
 import pandas as pd
 import re
 from io import StringIO
@@ -555,5 +565,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
