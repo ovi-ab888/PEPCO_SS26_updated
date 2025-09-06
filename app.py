@@ -16,30 +16,15 @@ import requests
 from auth import check_password                 # 🔐 access control (from auth.py)
 from theme import apply_theme, render_header    # 🎨 global CSS + header (from theme.py)
 
-# (Optional) config – if present, will override local defaults
-try:
-    from config import WASHING_CODES as CFG_WC, COLLECTION_MAPPING as CFG_CM
-    from config import PRICE_SHEET_CSV, PRODUCT_TRANSLATION_SHEET, MATERIAL_TRANSLATION_CSV
-except Exception:
-    CFG_WC = CFG_CM = None
-    PRICE_SHEET_CSV = (
-        "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/"
-        "pub?gid=583402611&single=true&output=csv"
-    )
-    PRODUCT_TRANSLATION_SHEET = ("1ue68TSJQQedKa7sVBB4syOc0OXJNaLS7p9vSnV52mKA", "SS26 Product_Name")
-    MATERIAL_TRANSLATION_CSV = (
-        "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/"
-        "pub?gid=1096440227&single=true&output=csv"
-    )
 
 # ========== FALLBACK MAPPINGS (used if config.py not provided) ==========
-WASHING_CODES = CFG_WC or {
+WASHING_CODES =  {
     '1': '১২৩৪৫', '2': '১৪৭৮৫', '3': 'djnst', '4': 'djnpt', '5': 'djnqt',
     '6': 'djnqt', '7': 'gjnpt', '8': 'gjnpu', '9': 'gjnqt', '10': 'gjnqu',
     '11': 'ijnst', '12': 'ijnsu', '13': 'ijnpu', '14': 'ijnsv', '15': 'djnsw'
 }
 
-COLLECTION_MAPPING = CFG_CM or {
+COLLECTION_MAPPING =  {
     'b': {
         'CROCO CLUB': 'MODERN 1',
         'LITTLE SAILOR': 'MODERN 2',
@@ -570,4 +555,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
