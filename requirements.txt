@@ -1,12 +1,8 @@
-streamlit
-pandas
-PyMuPDF
+streamlit==1.39.0
+pandas==2.2.2
+pymupdf==1.24.10
 openpyxl
 reportlab
-requests
+requests==2.32.3
 gspread
 oauth2client
-streamlit==1.39.0
-pymupdf==1.24.10
-pandas==2.2.2
-requests==2.32.3
