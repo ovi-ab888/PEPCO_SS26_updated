@@ -1,11 +1,11 @@
 streamlit==1.39.0
 pandas==2.2.2
-pymupdf==1.24.10; python_version < "3.13"
+pymupdf==1.24.10
 pdfplumber==0.11.0
 pdfminer.six==20231228
 pypdf==4.3.1
-openpyxl
-reportlab
+openpyxl==3.1.5
+reportlab==4.2.2
 requests==2.32.3
-gspread
-oauth2client
+gspread==6.2.0
+oauth2client==4.1.3
