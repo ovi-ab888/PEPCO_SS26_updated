@@ -3,7 +3,24 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
-import fitz  # Correct import name for PyMuPDF
+try:
+    import fitz  # PyMuPDF
+    PDF_BACKEND = "pymupdf"
+    st.success("✓ Using PyMuPDF backend")
+except ImportError:
+    try:
+        import pdfplumber
+        PDF_BACKEND = "pdfplumber"
+        st.success("✓ Using pdfplumber backend")
+    except ImportError:
+        try:
+            from pypdf import PdfReader
+            PDF_BACKEND = "pypdf"
+            st.success("✓ Using pypdf backend")
+        except ImportError:
+            st.error("❌ No PDF backend available. Please install pymupdf, pdfplumber, or pypdf")
+            st.stop()
+
 import pandas as pd
 import re
 from io import StringIO
@@ -11,81 +28,40 @@ import csv as pycsv
 from datetime import datetime, timedelta
 import os
 import requests
-import pdfplumber
-from pypdf import PdfReader
 
-# Local modules
+# Local modules fallback
 try:
-    from auth import check_password                 # 🔐 access control (from auth.py)
-    from theme import apply_theme, render_header    # 🎨 global CSS + header (from theme.py)
+    from auth import check_password
 except ImportError:
-    # Fallback functions if auth.py or theme.py are missing
     def check_password():
         return True
-    
+
+try:
+    from theme import apply_theme, render_header
+except ImportError:
     def apply_theme():
-        pass
+        st.markdown("""
+        <style>
+        .main { padding: 2rem; }
+        </style>
+        """, unsafe_allow_html=True)
     
     def render_header():
         st.markdown("<h1 style='text-align: center;'>PEPCO Data Processor</h1>", unsafe_allow_html=True)
 
-# ==================== PDF BACKEND DETECTION ====================
-try:
-    import fitz
-    PDF_BACKEND = "pymupdf"
-except ImportError:
-    try:
-        import pdfplumber
-        PDF_BACKEND = "pdfplumber"
-    except ImportError:
-        try:
-            from pypdf import PdfReader
-            PDF_BACKEND = "pypdf"
-        except ImportError:
-            st.error("No PDF backend available. Please add pymupdf==1.24.10 or pdfplumber==0.11.0 or pypdf==4.3.1 to requirements.txt")
-            st.stop()
-
-# ========== FALLBACK MAPPINGS (used if config.py not provided) ==========
-WASHING_CODES =  {
+# ========== FALLBACK MAPPINGS ==========
+WASHING_CODES = {
     '1': '১২৩৪৫', '2': '১৪৭৮৫', '3': 'djnst', '4': 'djnpt', '5': 'djnqt',
     '6': 'djnqt', '7': 'gjnpt', '8': 'gjnpu', '9': 'gjnqt', '10': 'gjnqu',
     '11': 'ijnst', '12': 'ijnsu', '13': 'ijnpu', '14': 'ijnsv', '15': 'djnsw'
 }
 
-COLLECTION_MAPPING =  {
-    'b': {
-        'CROCO CLUB': 'MODERN 1',
-        'LITTLE SAILOR': 'MODERN 2',
-        'EXPLORE THE WORLD': 'MODERN 3',
-        'JURASIC ADVENTURE': 'MODERN 4',
-        'WESTERN SPIRIT': 'CLASSIC 1',
-        'SUMMER FUN': 'CLASSIC 2'
-    },
-    'a': {
-        'Rainbow Girl': 'MODERN 1',
-        'NEONS PICNIC': 'MODERN 2',
-        'COUNTRY SIDE': 'ROMANTIC 2',
-        'ESTER GARDENG': 'ROMANTIC 3'
-    },
-    'd': {
-        'LITTLE TREASURE': 'MODERN 1',
-        'DINO FRIENDS': 'CLASSIC 1',
-        'EXOTIC ANIMALS': 'CLASSIC 2'
-    },
-    'd_girls': {
-        'SWEEET PASTELS': 'MODERN 1',
-        'PORCELAIN': 'ROMANTIC 2',
-        'SUMMER VIBE': 'ROMANTIC 3'
-    },
-    'yg': {
-        'CUTE_JUMP': 'COLLECTION_1',
-        'SWEET_HEART': 'COLLECTION_2',
-        'DAISY': 'COLLECTION_3',
-        'SPECIAL OCC': 'COLLECTION_4',
-        'LILALOV': 'COLLECTION_5',
-        'COOL GIRL': 'COLLECTION_6',
-        'DEL MAR': 'COLLECTION_7'
-    }
+COLLECTION_MAPPING = {
+    'b': {'CROCO CLUB': 'MODERN 1', 'LITTLE SAILOR': 'MODERN 2'},
+    'a': {'Rainbow Girl': 'MODERN 1', 'NEONS PICNIC': 'MODERN 2'},
+    'd': {'LITTLE TREASURE': 'MODERN 1', 'DINO FRIENDS': 'CLASSIC 1'},
+    'd_girls': {'SWEEET PASTELS': 'MODERN 1', 'PORCELAIN': 'ROMANTIC 2'},
+    'yg': {'CUTE_JUMP': 'COLLECTION_1', 'SWEET_HEART': 'COLLECTION_2'}
 }
 
 # ==================== DATA LOADERS ====================
@@ -94,13 +70,7 @@ def load_price_data():
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=583402611&single=true&output=csv"
         df = pd.read_csv(url)
-        if df.empty:
-            st.error("Price data sheet is empty")
-            return None
-        price_data = {}
-        for currency in df.columns:
-            price_data[currency] = df[currency].dropna().tolist()
-        return price_data
+        return {col: df[col].dropna().tolist() for col in df.columns} if not df.empty else None
     except Exception as e:
         st.error(f"Failed to load price data: {str(e)}")
         return None
@@ -110,12 +80,8 @@ def load_product_translations():
     try:
         sheet_id = "1ue68TSJQQedKa7sVBB4syOc0OXJNaLS7p9vSnV52mKA"
         sheet_name = "SS26 Product_Name"
-        encoded_sheet_name = requests.utils.quote(sheet_name)
-        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
-        df = pd.read_csv(url)
-        if df.empty:
-            st.error("Loaded translations but sheet appears empty")
-        return df
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={requests.utils.quote(sheet_name)}"
+        return pd.read_csv(url)
     except Exception as e:
         st.error(f"❌ Failed to load translations: {str(e)}")
         return pd.DataFrame()
@@ -125,47 +91,36 @@ def load_material_translations():
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
         df = pd.read_csv(url)
-        if df.empty:
-            st.error("Material translations sheet is empty")
-            return pd.DataFrame()
-        material_translations = []
-        for _, row in df.iterrows():
-            for lang in ['AL', 'BG', 'MK', 'RS']:
-                material_translations.append({
-                    'material': row['Name'],
-                    'language': lang,
-                    'translation': row[lang]
-                })
-        return pd.DataFrame(material_translations)
-    except Exception as e:
-        st.error(f"Failed to load material translations: {str(e)}")
+        return pd.DataFrame([
+            {'material': row['Name'], 'language': lang, 'translation': row[lang]}
+            for _, row in df.iterrows() for lang in ['AL', 'BG', 'MK', 'RS']
+        ]) if not df.empty else pd.DataFrame()
+    except Exception:
         return pd.DataFrame()
 
-def read_pdf_text(uploaded_file) -> str:
-    """Return full text of PDF using the first available backend."""
-    # Streamlit uploads are file-like; we need to reset pointer as we read
+def read_pdf_text(uploaded_file):
+    """Read PDF text using available backend"""
     pos = uploaded_file.tell()
     uploaded_file.seek(0)
-
-    if PDF_BACKEND == "pymupdf":
-        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        pages = [page.get_text() for page in doc]
-        doc.close()
-        text = "\n".join(pages)
-
-    elif PDF_BACKEND == "pdfplumber":
-        with pdfplumber.open(uploaded_file) as pdf:
-            pages = [(p.extract_text() or "") for p in pdf.pages]
-        text = "\n".join(pages)
-
-    else:  # pypdf
-        reader = PdfReader(uploaded_file)
-        pages = [(page.extract_text() or "") for page in reader.pages]
-        text = "\n".join(pages)
-
-    uploaded_file.seek(pos)  # restore pointer
+    
+    try:
+        if PDF_BACKEND == "pymupdf":
+            doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+            text = "\n".join([page.get_text() for page in doc])
+            doc.close()
+        elif PDF_BACKEND == "pdfplumber":
+            with pdfplumber.open(uploaded_file) as pdf:
+                text = "\n".join([p.extract_text() or "" for p in pdf.pages])
+        else:
+            from pypdf import PdfReader
+            reader = PdfReader(uploaded_file)
+            text = "\n".join([page.extract_text() or "" for page in reader.pages])
+    except Exception as e:
+        st.error(f"Error reading PDF: {str(e)}")
+        text = ""
+    
+    uploaded_file.seek(pos)
     return text
-
 # ==================== HELPERS ====================
 def format_number(value, currency):
     try:
@@ -588,10 +543,16 @@ def main():
     if not check_password():
         st.stop()
 
-    pepco_section()
+    st.subheader("PEPCO Data Processing")
+    st.info("📁 Please upload PDF files to begin processing")
 
-    st.markdown("---")
-    st.caption("This app developed by Ovi")
+    uploaded_files = st.file_uploader("Upload PEPCO PDF files", type=["pdf"], accept_multiple_files=True)
+    
+    if uploaded_files:
+        st.success(f"✅ Loaded {len(uploaded_files)} PDF file(s)")
+        for file in uploaded_files:
+            st.write(f"📄 {file.name}")
 
 if __name__ == "__main__":
     main()
+
