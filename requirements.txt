@@ -1,6 +1,6 @@
 streamlit==1.39.0
 pandas==2.2.2
-pymupdf==1.24.10
+pymupdf==1.24.10; python_version < "3.13"
 pdfplumber==0.11.0
 pdfminer.six==20231228
 pypdf==4.3.1
