@@ -3,27 +3,33 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="📑", layout="wide")
 
 # ======================== Imports ========================
-# ---- Robust PDF backends (PyMuPDF → pdfplumber → pypdf) ----
+# ---- Robust PDF backends ----
 PDF_BACKEND = None
 try:
-    import fitz  # PyMuPDF import name
+    import fitz  # PyMuPDF
     PDF_BACKEND = "pymupdf"
-except Exception:  # ModuleNotFoundError or other import failure
+except Exception:
     fitz = None
     try:
-        import pdfplumber  # pure-Python (pdfminer.six)
+        import pdfplumber
         PDF_BACKEND = "pdfplumber"
     except Exception:
         pdfplumber = None
         try:
-            from pypdf import PdfReader  # pure-Python
+            from pypdf import PdfReader
             PDF_BACKEND = "pypdf"
         except Exception:
             PdfReader = None
-            st.error(
-                "No PDF backend available. Please add `pymupdf==1.24.10` or `pdfplumber` or `pypdf` to requirements.txt and redeploy."
-            )
-            st.stop()
+            try:
+                from pdfminer.high_level import extract_text as pdfminer_extract_text
+                PDF_BACKEND = "pdfminer"
+            except Exception:
+                import streamlit as st
+                st.error(
+                    "No PDF backend available. Install any of: "
+                    "pymupdf (3.12), pdfplumber, pypdf, pdfminer.six."
+                )
+                st.stop()
 
 import pandas as pd
 import re
@@ -515,3 +521,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
