@@ -3,6 +3,7 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
+import fitz  # PyMuPDF
 import pandas as pd
 import re
 from io import StringIO
@@ -11,41 +12,110 @@ from datetime import datetime, timedelta
 import os
 import requests
 
-# Use pypdf for PDF reading
-try:
-    from pypdf import PdfReader
-    PDF_BACKEND = "pypdf"
-except ImportError:
-    st.error("❌ Please install pypdf")
-    st.stop()
+# ==================== LOGO + THEME (in-file, monolithic) ====================
+LOGO_PNG = "logo.png"
+LOGO_SVG = "logo.svg"
 
-# Local modules
-try:
-    from auth import check_password
-    from theme import apply_theme, render_header
-except ImportError:
-    # Fallback if auth.py or theme.py are missing
-    def check_password():
+THEME_CSS = """
+<style>
+:root{
+  --card-bg: rgba(255,255,255,.04);
+  --card-br: rgba(255,255,255,.12);
+  --input-bg: rgba(255,255,255,.08);
+  --input-br: rgba(255,255,255,.25);
+  --txt:      #E9ECF6;
+  --muted:    #C2C8DF;
+}
+
+.block-container{max-width:1120px; padding-top:1rem; padding-bottom:3rem;}
+
+h1,h2,h3{font-weight:700;}
+h1{letter-spacing:.2px;} h2,h3{letter-spacing:.1px;}
+
+section[data-testid="stFileUploader"],
+div[data-testid="stDataFrameContainer"],
+div[data-testid="stVerticalBlock"]:has(> div[data-testid="stDataEditor"]){
+  background:var(--card-bg)!important; border:1px solid var(--card-br)!important;
+  border-radius:14px!important; padding:12px 14px; box-shadow:0 1px 8px rgba(0,0,0,.12);
+}
+
+label, .stMultiSelect label, .stSelectbox label, .stNumberInput label, .stTextInput label{
+  color:var(--txt)!important; font-weight:500;
+}
+
+input, textarea{
+  color:var(--txt)!important;
+  background:var(--input-bg)!important;
+  border-color:var(--input-br)!important;
+}
+input::placeholder, textarea::placeholder{ color:var(--muted)!important; opacity:.95; }
+
+/* Select & multiselect */
+div[data-baseweb="select"] > div{
+  background:var(--input-bg)!important;
+  border-color:var(--input-br)!important;
+  border-radius:12px!important;
+}
+div[data-baseweb="select"] input{ color:var(--txt)!important; }
+div[data-baseweb="select"] svg{ opacity:.9; }
+
+/* Number input inner field */
+div[data-testid="stNumberInput"] input{
+  color:var(--txt)!important;
+  background:var(--input-bg)!important;
+  border-color:var(--input-br)!important;
+}
+
+.stButton > button{ border-radius:12px; padding:.55rem 1rem; }
+
+[data-testid="stTable"] td,[data-testid="stTable"] th{ padding:.45rem .6rem; }
+</style>
+"""
+
+# ==================== Password gate (custom, in this file) ====================
+
+def check_password():
+    """Simple password gate. Set in .streamlit/secrets.toml as app_password or env PEPCO_APP_PASSWORD"""
+    expected = None
+    # Prefer Streamlit secrets
+    try:
+        expected = st.secrets.get("app_password", None)
+    except Exception:
+        expected = None
+    # Fallback to environment variable
+    if expected is None:
+        expected = os.environ.get("PEPCO_APP_PASSWORD")
+
+    if expected is None:
+        st.error("App password not configured. Set 'app_password' in .streamlit/secrets.toml or PEPCO_APP_PASSWORD env var.")
+        return False
+
+    def _password_entered():
+        if st.session_state.get("password") == expected:
+            st.session_state["password_correct"] = True
+            try:
+                del st.session_state["password"]
+            except Exception:
+                pass
+        else:
+            st.session_state["password_correct"] = False
+
+    if st.session_state.get("password_correct", None) is True:
         return True
-    
-    def apply_theme():
-        st.markdown("""
-        <style>
-        .main { padding: 2rem; }
-        </style>
-        """, unsafe_allow_html=True)
-    
-    def render_header():
-        st.markdown("<h1 style='text-align: center;'>PEPCO Data Processor</h1>", unsafe_allow_html=True)
 
-# ========== FALLBACK MAPPINGS ==========
-WASHING_CODES = {
+    st.text_input("Password", type="password", key="password", on_change=_password_entered)
+    if st.session_state.get("password_correct") is False:
+        st.error("Your password Incorrect,  Please contact Mr. Ovi")
+    return False
+
+# ==================== Constants / Mappings ====================
+WASHING_CODES =  {
     '1': '১২৩৪৫', '2': '১৪৭৮৫', '3': 'djnst', '4': 'djnpt', '5': 'djnqt',
     '6': 'djnqt', '7': 'gjnpt', '8': 'gjnpu', '9': 'gjnqt', '10': 'gjnqu',
     '11': 'ijnst', '12': 'ijnsu', '13': 'ijnpu', '14': 'ijnsv', '15': 'djnsw'
 }
 
-COLLECTION_MAPPING = {
+COLLECTION_MAPPING =  {
     'b': {
         'CROCO CLUB': 'MODERN 1',
         'LITTLE SAILOR': 'MODERN 2',
@@ -81,7 +151,7 @@ COLLECTION_MAPPING = {
     }
 }
 
-# ==================== DATA LOADERS ====================
+# ==================== Data Loaders ====================
 @st.cache_data(ttl=600)
 def load_price_data():
     try:
@@ -134,27 +204,7 @@ def load_material_translations():
         st.error(f"Failed to load material translations: {str(e)}")
         return pd.DataFrame()
 
-def read_pdf_text(uploaded_file):
-    """Read PDF text using available backend"""
-    pos = uploaded_file.tell()
-    uploaded_file.seek(0)
-    
-    try:
-        if PDF_BACKEND == "pdfplumber":
-            with pdfplumber.open(uploaded_file) as pdf:
-                text = "\n".join([p.extract_text() or "" for p in pdf.pages])
-        else:
-            from pypdf import PdfReader
-            reader = PdfReader(uploaded_file)
-            text = "\n".join([page.extract_text() or "" for page in reader.pages])
-    except Exception as e:
-        st.error(f"Error reading PDF: {str(e)}")
-        text = ""
-    
-    uploaded_file.seek(pos)
-    return text
-
-# ==================== HELPERS ====================
+# ==================== Helpers ====================
 def format_number(value, currency):
     try:
         if isinstance(value, str):
@@ -169,6 +219,7 @@ def format_number(value, currency):
         return str(int(float(value)))
     except (ValueError, TypeError):
         return str(value)
+
 
 def find_closest_price(pln_value):
     try:
@@ -191,6 +242,7 @@ def find_closest_price(pln_value):
         st.error(f"Invalid price value: {str(e)}")
         return None
 
+
 def get_classification_type(item_class):
     if not item_class: return None
     ic = item_class.lower()
@@ -206,6 +258,7 @@ def get_classification_type(item_class):
     if 'mens outerwear' in ic: return 'b'
     return None
 
+
 def get_dept_value(item_class):
     if not item_class: return ""
     ic = item_class.lower()
@@ -216,12 +269,14 @@ def get_dept_value(item_class):
     if 'mens outerwear' in ic: return "MEN"
     return ""
 
+
 def modify_collection(collection, item_class):
     if not item_class: return collection
     ic = item_class.lower()
     if any(x in ic for x in ['younger boys outerwear','older boys outerwear']): return f"{collection} B"
     if any(x in ic for x in ['older girls outerwear','younger girls outerwear']): return f"{collection} G"
     return collection
+
 
 def extract_colour_from_page2(text, page_number=1):
     try:
@@ -252,57 +307,51 @@ def extract_colour_from_page2(text, page_number=1):
         st.error(f"Error extracting colour: {str(e)}")
         return "UNKNOWN"
 
+
 def extract_order_id_only(file):
-    pos = file.tell()
-    file.seek(0)
+    pos = None
+    try: pos = file.tell()
+    except Exception: pass
+    try: file.seek(0)
+    except Exception: pass
     try:
-        if PDF_BACKEND == "pdfplumber":
-            with pdfplumber.open(file) as pdf:
-                if len(pdf.pages) < 1:
-                    file.seek(pos)
-                    return None
-                page1_text = pdf.pages[0].extract_text() or ""
-        else:
-            from pypdf import PdfReader
-            reader = PdfReader(file)
-            if len(reader.pages) < 1:
-                file.seek(pos)
+        with fitz.open(stream=file.read(), filetype="pdf") as doc:
+            if len(doc) < 1:
+                try: file.seek(0 if pos is None else pos)
+                except Exception: pass
                 return None
-            page1_text = reader.pages[0].extract_text() or ""
-        
-        m = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*([A-Z0-9_+-]+)", page1_text, re.IGNORECASE)
-        return m.group(1).strip() if m else None
+            page1_text = doc[0].get_text()
     except Exception:
+        try: file.seek(0 if pos is None else pos)
+        except Exception: pass
         return None
-    finally:
-        file.seek(pos)
+    try: file.seek(0 if pos is None else pos)
+    except Exception: pass
+    m = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*([A-Z0-9_+-]+)", page1_text, re.IGNORECASE)
+    return m.group(1).strip() if m else None
+
 
 def extract_data_from_pdf(file):
     try:
-        # Read PDF text
-        pdf_text = read_pdf_text(file)
-        if not pdf_text:
-            st.error("Could not read PDF content")
+        doc = fitz.open(stream=file.read(), filetype="pdf")
+        if len(doc) < 3:
+            st.error("PDF must have at least 3 pages.")
             return None
-        
-        # Extract data from text using regex
-        order_id = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*(.+)", pdf_text)
-        merch_code = re.search(r"Merch\s*code\s*\.{2,}\s*([\w/]+)", pdf_text)
-        season = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", pdf_text)
-        style_code = re.search(r"\b\d{6}\b", pdf_text)
-        collection = re.search(r"Collection\s*\.{2,}\s*(.+)", pdf_text)
-        date_match = re.search(r"Handover\s*date\s*\.{2,}\s*(\d{2}/\d{2}/\d{4})", pdf_text)
-        item_class = re.search(r"Item classification\s*\.{2,}\s*(.+)", pdf_text)
-        supplier_code = re.search(r"Supplier product code\s*\.{2,}\s*(.+)", pdf_text)
-        supplier_name = re.search(r"Supplier name\s*\.{2,}\s*(.+)", pdf_text)
+        page1 = doc[0].get_text()
 
-        # Process extracted data
+        merch_code = re.search(r"Merch\s*code\s*\.{2,}\s*([\w/]+)", page1)
+        season = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", page1)
+        style_code = re.search(r"\b\d{6}\b", page1)
         style_suffix = ""
         if merch_code and season:
-            style_suffix = f"{merch_code.group(1).strip()}{season.group(2)}"
+            merch_value = merch_code.group(1).strip()
+            season_digits = season.group(2)
+            style_suffix = f"{merch_value}{season_digits}"
         elif merch_code:
             style_suffix = merch_code.group(1).strip()
 
+        collection = re.search(r"Collection\s*\.{2,}\s*(.+)", page1)
+        date_match = re.search(r"Handover\s*date\s*\.{2,}\s*(\d{2}/\d{2}/\d{4})", page1)
         batch = "UNKNOWN"
         if date_match:
             try:
@@ -310,22 +359,25 @@ def extract_data_from_pdf(file):
             except Exception:
                 pass
 
+        order_id = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*(.+)", page1)
+        item_class = re.search(r"Item classification\s*\.{2,}\s*(.+)", page1)
+        supplier_code = re.search(r"Supplier product code\s*\.{2,}\s*(.+)", page1)
+        supplier_name = re.search(r"Supplier name\s*\.{2,}\s*(.+)", page1)
+
         item_class_value = item_class.group(1).strip() if item_class else "UNKNOWN"
         class_type = get_classification_type(item_class_value)
         collection_value = collection.group(1).split("-")[0].strip() if collection else "UNKNOWN"
-        
         if class_type and class_type in COLLECTION_MAPPING:
             for orig_collection, new_collection in COLLECTION_MAPPING[class_type].items():
                 if orig_collection.upper() in collection_value.upper():
                     collection_value = new_collection
                     break
 
-        colour = extract_colour_from_page2(pdf_text)
-        
-        # Extract SKUs and barcodes
-        skus = re.findall(r"\b\d{8}\b", pdf_text)
-        all_barcodes = re.findall(r"\b\d{13}\b", pdf_text)
-        excluded = set(re.findall(r"barcode:\s*(\d{13});", pdf_text))
+        colour = extract_colour_from_page2(doc[1].get_text())
+        page3 = doc[2].get_text()
+        skus = re.findall(r"\b\d{8}\b", page3)
+        all_barcodes = re.findall(r"\b\d{13}\b", page3)
+        excluded = set(re.findall(r"barcode:\s*(\d{13});", page3))
         valid_barcodes = [b for b in all_barcodes if b not in excluded]
 
         result = [{
@@ -348,37 +400,294 @@ def extract_data_from_pdf(file):
         st.error(f"PDF error: {str(e)}")
         return None
 
-# ==================== MAIN WORKFLOW ====================
-def process_pepco_pdf(uploaded_pdf, extra_order_ids=None):
-    st.info("PDF processing functionality would go here")
-    st.write(f"File: {uploaded_pdf.name}")
+
+def format_product_translations(product_name, translation_row,
+                                selected_materials=None, material_translations=None,
+                                material_compositions=None):
+    """Return one big multilingual string with optional material names or composition% appended."""
+    formatted = []
+    country_suffixes = {
+        'BiH': " Sastav materijala na ušivenoj etiketi.",
+        'RS': " Sastav materijala nalazi se na ušivenoj etiketi.",
+    }
+    en_text = str(translation_row['EN']) if pd.notna(translation_row.get('EN')) else product_name
+    formatted.append(f"|EN| {en_text}")
+
+    combined_languages = {
+        'ES': f"{translation_row['ES']} / {translation_row['ES_CA']}" if pd.notna(translation_row.get('ES_CA')) else translation_row.get('ES')
+    }
+    language_order = [
+        'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES',
+        'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK',
+        'PL', 'PT', 'RO', 'RS', 'SI', 'SK'
+    ]
+
+    for lang in language_order:
+        if lang in combined_languages and combined_languages[lang] is not None:
+            text = combined_languages[lang]
+        elif pd.notna(translation_row.get(lang)):
+            text = translation_row[lang]
+        else:
+            text = product_name
+
+        if selected_materials and material_translations and lang in ['AL', 'BG', 'MK', 'RS']:
+            # Prefer composition text if available
+            composition_text = (material_compositions or {}).get(lang, "")
+            names_text = material_translations.get(lang, "")
+            if composition_text:
+                text = f"{text}: {composition_text}"
+            elif names_text:
+                text = f"{text}: {names_text}"
+
+        if lang in country_suffixes:
+            if not text.endswith('.'):
+                text += "."
+            text += country_suffixes[lang]
+        formatted.append(f"|{lang}| {text}")
+
+    return " ".join([s for s in formatted if s])
+
+# ==================== Main workflow ====================
+
+def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
+    # Load references
+    translations_df = load_product_translations()
+    material_translations_df = load_material_translations()
+    if not (uploaded_pdf and not translations_df.empty):
+        return
+
+    # Parse PDF
+    result_data = extract_data_from_pdf(uploaded_pdf)
+    if not result_data:
+        return
+    df = pd.DataFrame(result_data)
+
+    # Merge extra Order_IDs from other PDFs
     if extra_order_ids:
-        st.write(f"Extra order IDs: {extra_order_ids}")
+        try:
+            df['Order_ID'] = df['Order_ID'].astype(str) + "+" + extra_order_ids
+        except Exception:
+            pass
+
+    # ----- UI Row: 4 columns (Dept, Product, Washing, PLN) -----
+    c1, c2, c3, c4 = st.columns(4)
+    depts = translations_df['DEPARTMENT'].dropna().unique().tolist()
+    with c1: selected_dept = st.selectbox("Select Department", options=depts, key="ui_dept")
+    filtered = translations_df[translations_df['DEPARTMENT'] == selected_dept]
+    products = filtered['PRODUCT_NAME'].dropna().unique().tolist()
+    with c2: product_type = st.selectbox("Select Product Type", options=products, key="ui_product")
+    with c3: washing_code_key = st.selectbox("Select Washing Code", options=list(WASHING_CODES.keys()), key="ui_wash")
+    with c4: pln_price_raw = st.text_input("Enter PLN Price", key="ui_pln_price")
+
+    pln_price = None
+    if pln_price_raw.strip():
+        try:
+            pln_price = float(pln_price_raw.replace(",", "."))
+            if pln_price < 0:
+                st.error("❌ Price can't be negative.")
+                pln_price = None
+        except ValueError:
+            st.error("❌ Please enter a valid number like 12.50 or 12,50")
+            pln_price = None
+
+    # ----- Material Composition (auto rows to reach 100%, max 5) -----
+    st.markdown("### Material Composition (%)")
+    if "mat_rows" not in st.session_state: st.session_state.mat_rows = 1
+    if "mat_data" not in st.session_state: st.session_state.mat_data = [{"mat": None, "pct": 0}]
+    materials_list = material_translations_df['material'].dropna().unique().tolist() if not material_translations_df.empty else []
+
+    def _ensure_row(i):
+        while i >= len(st.session_state.mat_data):
+            st.session_state.mat_data.append({"mat": None, "pct": 0})
+
+    for i in range(st.session_state.mat_rows):
+        _ensure_row(i)
+        prev_total = sum(r["pct"] for r in st.session_state.mat_data[:i] if r["pct"])
+        remain = max(0, 100 - prev_total)
+        cA, cB = st.columns([3, 1.3])
+        with cA:
+            cur_mat = st.session_state.mat_data[i]["mat"]
+            options = ["—"] + materials_list
+            idx = options.index(cur_mat) if (cur_mat in options) else 0
+            st.session_state.mat_data[i]["mat"] = st.selectbox(
+                "Select Material(s)" if i == 0 else f"Select Material(s) #{i+1}",
+                options, index=idx, key=f"mat_sel_{i}"
+            )
+        with cB:
+            cur_pct = st.session_state.mat_data[i]["pct"]
+            default_pct = 100 if (i == 0 and not cur_pct) else min(cur_pct, remain)
+            st.session_state.mat_data[i]["pct"] = st.number_input(
+                "Composition (%)" if i == 0 else f"Composition (%) #{i+1}",
+                min_value=0, max_value=remain, step=1, value=default_pct, key=f"mat_pct_{i}"
+            )
+
+    valid_rows = [r for r in st.session_state.mat_data[:st.session_state.mat_rows]
+                  if r["mat"] not in (None, "—") and r["pct"] > 0]
+    running_total = sum(r["pct"] for r in valid_rows)
+
+    if running_total < 100 and st.session_state.mat_rows < 5:
+        last = st.session_state.mat_data[st.session_state.mat_rows - 1]
+        if last["mat"] not in (None, "—") and last["pct"] > 0:
+            st.session_state.mat_rows += 1
+            _ensure_row(st.session_state.mat_rows - 1)
+            st.rerun()
+
+    if running_total >= 100 and st.session_state.mat_rows > len(valid_rows):
+        st.session_state.mat_rows = len(valid_rows)
+
+    if st.session_state.mat_rows == 1 and valid_rows and valid_rows[0]["pct"] == 100 and (valid_rows[0]["mat"] or "").lower() == "cotton":
+        st.info("✅ 100% selected — আর নতুন material প্রয়োজন নেই. (Cotton flag will be Y)")
+    elif running_total > 100:
+        st.error("⚠️ Total exceeds 100%")
+    st.write(f"**Total: {running_total}%**")
+
+    # Build translations for selected materials
+    selected_materials = [r["mat"] for r in valid_rows]
+    cotton_value = "Y" if (len(valid_rows) == 1 and (valid_rows[0]["mat"] or "").lower() == "cotton" and valid_rows[0]["pct"] == 100) else ""
+
+    material_trans_dict, material_compositions = {}, {}
+    if selected_materials and not material_translations_df.empty:
+        for lang in ['AL','BG','MK','RS']:
+            names, comp = [], []
+            for r in valid_rows:
+                t = material_translations_df[
+                    (material_translations_df['material'] == r['mat']) &
+                    (material_translations_df['language'] == lang)
+                ]
+                if not t.empty:
+                    tr = t['translation'].iloc[0]
+                    names.append(tr)
+                    comp.append(f"{r['pct']}% {tr}")
+            if names: material_trans_dict[lang] = ", ".join(names)
+            if comp: material_compositions[lang] = ", ".join(comp)
+
+    # Enrich DataFrame
+    df['Dept'] = df['Item_classification'].apply(get_dept_value)
+    df['Cotton'] = cotton_value
+    df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
+
+    product_row = filtered[filtered['PRODUCT_NAME'] == product_type]
+    if not product_row.empty:
+        df['product_name'] = format_product_translations(
+            product_type, product_row.iloc[0], selected_materials, material_trans_dict, material_compositions
+        )
+    else:
+        df['product_name'] = ""
+
+    df['washing_code'] = WASHING_CODES[washing_code_key]
+
+    # Price ladder + CSV export
+    if pln_price is not None:
+        currency_values = find_closest_price(pln_price)
+        if currency_values:
+            for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
+                df[cur] = currency_values.get(cur, "")
+            df['PLN'] = format_number(pln_price, 'PLN')
+
+            final_cols = [
+                "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
+                "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
+                "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
+                "RSD","HUF","product_name","Dept","Cotton"
+            ]
+
+            st.success("✅ Done!")
+            st.subheader("Edit Before Download")
+            edited_df = st.data_editor(df[final_cols])
+
+            csv_buffer = StringIO()
+            writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
+            writer.writerow(final_cols)
+            for row in edited_df.itertuples(index=False):
+                writer.writerow(row)
+
+            st.download_button(
+                "📥 Download CSV",
+                csv_buffer.getvalue().encode('utf-8-sig'),
+                file_name=f"{os.path.splitext(uploaded_pdf.name)[0]}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.warning("Processing stopped - valid PLN price not found")
+
+
+# ==================== Section (Uploader + Reset) ====================
+
+def pepco_section():
+    st.subheader("PEPCO Data Processing")
+
+    # one-time init for uploader key
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
+
+    # Reset/New upload button
+    cols = st.columns([1, 6])
+    with cols[0]:
+        def _reset_all():
+            # clear only app-related state keys
+            for k in list(st.session_state.keys()):
+                if k.startswith(("ui_", "mat_", "pepco_", "colour_", "colour_manual_", "colour_missing_")):
+                    st.session_state.pop(k, None)
+            st.session_state.uploader_key += 1
+            st.rerun()
+        st.button("🔄 New upload", on_click=_reset_all)
+
+    uploaded_pdfs = st.file_uploader(
+        "Upload PEPCO Data file",
+        type=["pdf"],
+        key=f"pepco_uploader_{st.session_state.uploader_key}",
+        accept_multiple_files=True
+    )
+
+    if uploaded_pdfs:
+        if not isinstance(uploaded_pdfs, list):
+            uploaded_pdfs = [uploaded_pdfs]
+        primary_pdf = uploaded_pdfs[0]
+        others = uploaded_pdfs[1:]
+
+        # collect Order_ID from additional PDFs
+        other_ids = []
+        for f in others:
+            try: f.seek(0)
+            except Exception: pass
+            oid = extract_order_id_only(f)
+            if oid: other_ids.append(oid)
+            try: f.seek(0)
+            except Exception: pass
+
+        concatenated_ids = "+".join(other_ids) if other_ids else ""
+        process_pepco_pdf(primary_pdf, extra_order_ids=concatenated_ids)
+
+
+# ==================== Header Render ====================
+
+def render_header():
+    left, right = st.columns([3, 10], vertical_alignment="center")
+    with left:
+        if os.path.exists(LOGO_SVG):
+            st.image(LOGO_SVG, width=300)
+        elif os.path.exists(LOGO_PNG):
+            st.image(LOGO_PNG, width=300)
+        else:
+            st.markdown("<div style='font-size:40px'>🏷️</div>", unsafe_allow_html=True)
+
 
 # ==================== MAIN ====================
+
 def main():
-    apply_theme()
+    st.markdown(THEME_CSS, unsafe_allow_html=True)
     render_header()
+
     st.title("PEPCO Automation App")
 
     if not check_password():
         st.stop()
 
-    st.subheader("PEPCO Data Processing")
-    st.info("📁 Please upload PDF files to begin processing")
+    pepco_section()
 
-    uploaded_files = st.file_uploader("Upload PEPCO PDF files", type=["pdf"], accept_multiple_files=True)
-    
-    if uploaded_files:
-        st.success(f"✅ Loaded {len(uploaded_files)} PDF file(s)")
-        for file in uploaded_files:
-            text = read_pdf_text(file)
-            st.write(f"📄 {file.name} - {len(text)} characters read")
-            
-            # Simple display of PDF content
-            with st.expander(f"View PDF content: {file.name}"):
-                st.text_area("PDF Text", text[:1000] + "..." if len(text) > 1000 else text, height=200)
+    st.markdown("---")
+    st.caption("This app developed by Ovi")
+
 
 if __name__ == "__main__":
     main()
-
