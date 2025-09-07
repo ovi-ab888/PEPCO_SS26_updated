@@ -272,20 +272,26 @@ def extract_data_from_pdf(file):
         excluded = set(re.findall(r"barcode:\s*(\d{13});", page3))
         valid_barcodes = [b for b in all_barcodes if b not in excluded]
 
-       result = [{
-    "Order_ID": order_id.group(1).strip() if order_id else "UNKNOWN",  # FIXED: changed ] to )
-    "Style": style_code.group() if style_code else "UNKNOWN",
-    "Colour": colour,
-    "Supplier_product_code": supplier_code.group(1).strip() if supplier_code else "UNKNOWN",
-    "Item_classification": item_class_value,
-    "Supplier_name": supplier_name.group(1).strip() if supplier_name else "UNKNOWN",
-    "today_date": datetime.today().strftime('%d-%m-%Y'),
-    "Collection": collection_value,
-    "Colour_SKU": f"{colour} • SKU {sku}",
-    "Style_Merch_Season": f"STYLE {style_code.group()} • {style_suffix} • Batch No./" if style_code else "STYLE UNKNOWN",
-    "Batch": f"Data e prodhimit: {batch}",
-    "barcode": barcode
-} for sku, barcode in zip(skus, valid_barcodes)]
+        # Make sure this line is properly indented (4 spaces from the function def)
+        result = [{
+            "Order_ID": order_id.group(1).strip() if order_id else "UNKNOWN",
+            "Style": style_code.group() if style_code else "UNKNOWN",
+            "Colour": colour,
+            "Supplier_product_code": supplier_code.group(1).strip() if supplier_code else "UNKNOWN",
+            "Item_classification": item_class_value,
+            "Supplier_name": supplier_name.group(1).strip() if supplier_name else "UNKNOWN",
+            "today_date": datetime.today().strftime('%d-%m-%Y'),
+            "Collection": collection_value,
+            "Colour_SKU": f"{colour} • SKU {sku}",
+            "Style_Merch_Season": f"STYLE {style_code.group()} • {style_suffix} • Batch No./" if style_code else "STYLE UNKNOWN",
+            "Batch": f"Data e prodhimit: {batch}",
+            "barcode": barcode
+        } for sku, barcode in zip(skus, valid_barcodes)]
+
+        return result
+    except Exception as e:
+        st.error(f"PDF error: {str(e)}")
+        return None
 
         return result
     except Exception as e:
@@ -553,5 +559,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
