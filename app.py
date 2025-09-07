@@ -1,49 +1,72 @@
 # ==================== PAGE CONFIG (MUST BE FIRST) ====================
 import streamlit as st
-st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
+st.set_page_config(page_title="PEPCO Test", page_icon="🧪", layout="wide")
 
-# ==================== Imports ====================
-import pandas as pd
-import re
-from io import StringIO
-import csv as pycsv
-from datetime import datetime, timedelta
-import os
-import requests
+# ==================== Test PDF Libraries ====================
+st.title("PDF Library Test")
 
-# Try to use pdfplumber, fallback to pypdf
+# Test if pdfplumber is available
 try:
     import pdfplumber
-    PDF_BACKEND = "pdfplumber"
-    st.success("✓ Using pdfplumber backend")
+    st.success("✅ pdfplumber is installed!")
 except ImportError:
+    st.error("❌ pdfplumber is NOT installed")
+
+# Test if pypdf is available  
+try:
+    from pypdf import PdfReader
+    st.success("✅ pypdf is installed!")
+except ImportError:
+    st.error("❌ pypdf is NOT installed")
+
+# Test other essential libraries
+try:
+    import pandas as pd
+    st.success("✅ pandas is installed!")
+except ImportError:
+    st.error("❌ pandas is NOT installed")
+
+try:
+    import requests
+    st.success("✅ requests is installed!")
+except ImportError:
+    st.error("❌ requests is NOT installed")
+
+# Show installed packages
+st.subheader("Installed Packages")
+try:
+    import pkg_resources
+    installed_packages = [f"{d.project_name}=={d.version}" for d in pkg_resources.working_set]
+    st.text_area("Installed Packages", "\n".join(sorted(installed_packages)), height=200)
+except:
+    st.info("Could not list installed packages")
+
+# Simple file upload test
+st.subheader("File Upload Test")
+uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
+
+if uploaded_file:
+    st.success(f"✅ File uploaded: {uploaded_file.name}")
+    
+    # Try to read with pdfplumber
+    try:
+        import pdfplumber
+        with pdfplumber.open(uploaded_file) as pdf:
+            page_count = len(pdf.pages)
+            st.info(f"📄 PDF has {page_count} pages (pdfplumber)")
+    except Exception as e:
+        st.error(f"pdfplumber error: {str(e)}")
+    
+    # Try to read with pypdf
     try:
         from pypdf import PdfReader
-        PDF_BACKEND = "pypdf"
-        st.success("✓ Using pypdf backend")
-    except ImportError:
-        st.error("❌ Please install pdfplumber or pypdf")
-        st.stop()
+        reader = PdfReader(uploaded_file)
+        st.info(f"📄 PDF has {len(reader.pages)} pages (pypdf)")
+    except Exception as e:
+        st.error(f"pypdf error: {str(e)}")
 
-# Local modules fallback
-try:
-    from auth import check_password
-except ImportError:
-    def check_password():
-        return True
-
-try:
-    from theme import apply_theme, render_header
-except ImportError:
-    def apply_theme():
-        st.markdown("""
-        <style>
-        .main { padding: 2rem; }
-        </style>
-        """, unsafe_allow_html=True)
-    
-    def render_header():
-        st.markdown("<h1 style='text-align: center;'>PEPCO Data Processor</h1>", unsafe_allow_html=True)
+st.markdown("---")
+st.caption("Test app to verify PDF library installation")
 
 # ========== FALLBACK MAPPINGS ==========
 WASHING_CODES = {
@@ -559,6 +582,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
