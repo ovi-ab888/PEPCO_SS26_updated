@@ -12,11 +12,39 @@ import csv as pycsv
 from datetime import datetime, timedelta
 import os
 import requests
+import pdfplumber
+from pypdf import PdfReader
 
 # Local modules
-from auth import check_password                 # 🔐 access control (from auth.py)
-from theme import apply_theme, render_header    # 🎨 global CSS + header (from theme.py)
+try:
+    from auth import check_password                 # 🔐 access control (from auth.py)
+    from theme import apply_theme, render_header    # 🎨 global CSS + header (from theme.py)
+except ImportError:
+    # Fallback functions if auth.py or theme.py are missing
+    def check_password():
+        return True
+    
+    def apply_theme():
+        pass
+    
+    def render_header():
+        st.markdown("<h1 style='text-align: center;'>PEPCO Data Processor</h1>", unsafe_allow_html=True)
 
+# ==================== PDF BACKEND DETECTION ====================
+try:
+    import fitz
+    PDF_BACKEND = "pymupdf"
+except ImportError:
+    try:
+        import pdfplumber
+        PDF_BACKEND = "pdfplumber"
+    except ImportError:
+        try:
+            from pypdf import PdfReader
+            PDF_BACKEND = "pypdf"
+        except ImportError:
+            st.error("No PDF backend available. Please add pymupdf==1.24.10 or pdfplumber==0.11.0 or pypdf==4.3.1 to requirements.txt")
+            st.stop()
 
 # ========== FALLBACK MAPPINGS (used if config.py not provided) ==========
 WASHING_CODES =  {
@@ -114,8 +142,6 @@ def load_material_translations():
         st.error(f"Failed to load material translations: {str(e)}")
         return pd.DataFrame()
 
-
-
 def read_pdf_text(uploaded_file) -> str:
     """Return full text of PDF using the first available backend."""
     # Streamlit uploads are file-like; we need to reset pointer as we read
@@ -140,9 +166,6 @@ def read_pdf_text(uploaded_file) -> str:
 
     uploaded_file.seek(pos)  # restore pointer
     return text
-
-
-
 
 # ==================== HELPERS ====================
 def format_number(value, currency):
@@ -522,8 +545,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         else:
             st.warning("Processing stopped - valid PLN price not found")
 
-
-
 # ==================== SECTION (with New upload/Reset) ====================
 def pepco_section():
     st.subheader("PEPCO Data Processing")
@@ -586,9 +607,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
