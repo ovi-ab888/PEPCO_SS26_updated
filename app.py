@@ -11,17 +11,13 @@ from datetime import datetime, timedelta
 import os
 import requests
 
-# Try to use pdfplumber, fallback to pypdf
+# Use pypdf for PDF reading
 try:
-    import pdfplumber
-    PDF_BACKEND = "pdfplumber"
+    from pypdf import PdfReader
+    PDF_BACKEND = "pypdf"
 except ImportError:
-    try:
-        from pypdf import PdfReader
-        PDF_BACKEND = "pypdf"
-    except ImportError:
-        st.error("❌ Please install pdfplumber or pypdf")
-        st.stop()
+    st.error("❌ Please install pypdf")
+    st.stop()
 
 # Local modules
 try:
@@ -385,3 +381,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
