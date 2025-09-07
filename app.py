@@ -3,24 +3,6 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
-try:
-    import fitz  # PyMuPDF
-    PDF_BACKEND = "pymupdf"
-    st.success("✓ Using PyMuPDF backend")
-except ImportError:
-    try:
-        import pdfplumber
-        PDF_BACKEND = "pdfplumber"
-        st.success("✓ Using pdfplumber backend")
-    except ImportError:
-        try:
-            from pypdf import PdfReader
-            PDF_BACKEND = "pypdf"
-            st.success("✓ Using pypdf backend")
-        except ImportError:
-            st.error("❌ No PDF backend available. Please install pymupdf, pdfplumber, or pypdf")
-            st.stop()
-
 import pandas as pd
 import re
 from io import StringIO
@@ -28,6 +10,20 @@ import csv as pycsv
 from datetime import datetime, timedelta
 import os
 import requests
+
+# Try to use pdfplumber, fallback to pypdf
+try:
+    import pdfplumber
+    PDF_BACKEND = "pdfplumber"
+    st.success("✓ Using pdfplumber backend")
+except ImportError:
+    try:
+        from pypdf import PdfReader
+        PDF_BACKEND = "pypdf"
+        st.success("✓ Using pypdf backend")
+    except ImportError:
+        st.error("❌ Please install pdfplumber or pypdf")
+        st.stop()
 
 # Local modules fallback
 try:
@@ -98,17 +94,14 @@ def load_material_translations():
     except Exception:
         return pd.DataFrame()
 
+# ==================== PDF READING ====================
 def read_pdf_text(uploaded_file):
     """Read PDF text using available backend"""
     pos = uploaded_file.tell()
     uploaded_file.seek(0)
     
     try:
-        if PDF_BACKEND == "pymupdf":
-            doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            text = "\n".join([page.get_text() for page in doc])
-            doc.close()
-        elif PDF_BACKEND == "pdfplumber":
+        if PDF_BACKEND == "pdfplumber":
             with pdfplumber.open(uploaded_file) as pdf:
                 text = "\n".join([p.extract_text() or "" for p in pdf.pages])
         else:
@@ -551,7 +544,12 @@ def main():
     if uploaded_files:
         st.success(f"✅ Loaded {len(uploaded_files)} PDF file(s)")
         for file in uploaded_files:
-            st.write(f"📄 {file.name}")
+            text = read_pdf_text(file)
+            st.write(f"📄 {file.name} - {len(text)} characters read")
+            
+            # Simple text display
+            with st.expander(f"View PDF content: {file.name}"):
+                st.text_area("PDF Text", text, height=200)
 
 if __name__ == "__main__":
     main()
