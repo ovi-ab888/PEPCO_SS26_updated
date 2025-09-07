@@ -3,28 +3,8 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
-# ---- Robust PDF backends ----
-PDF_BACKEND = None
 
-try:
-    import fitz  # PyMuPDF import name
-    PDF_BACKEND = "pymupdf"
-except Exception:
-    fitz = None
-    try:
-        import pdfplumber  # pure-Python, uses pdfminer.six
-        PDF_BACKEND = "pdfplumber"
-    except Exception:
-        pdfplumber = None
-        try:
-            from pypdf import PdfReader  # pure-Python
-            PDF_BACKEND = "pypdf"
-        except Exception:
-            PdfReader = None
-            import streamlit as st
-            st.error("No PDF backend available. Install one of: pymupdf, pdfplumber, pypdf.")
-            st.stop()
-
+import fitz
 import pandas as pd
 import re
 from io import StringIO
@@ -606,6 +586,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
