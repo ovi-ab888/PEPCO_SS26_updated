@@ -3,8 +3,7 @@ import streamlit as st
 st.set_page_config(page_title="PEPCO Data Processor", page_icon="🧾", layout="wide")
 
 # ==================== Imports ====================
-
-import fitz
+import fitz  # Correct import name for PyMuPDF
 import pandas as pd
 import re
 from io import StringIO
@@ -250,17 +249,6 @@ def extract_colour_from_page2(text, page_number=1):
             and not re.match(r"^[\d\s,./-]+$", line)
         ]
         colour = "UNKNOWN"
-        if filtered:
-            colour = filtered[0]
-            colour = re.sub(r'[\d\.\)\(]+', '', colour).strip().upper()
-            if "MANUAL" in colour:
-                st.warning(f"⚠️ Page {page_number}: 'MANUAL' detected in colour field")
-                manual = st.text_input(f"Enter Colour (Page {page_number}):", key=f"colour_manual_{page_number}")
-                return manual.upper() if manual else "UNKNOWN"
-            return colour if colour else "UNKNOWN"
-        st.warning(f"⚠️ Page {page_number}: Colour information not found in PDF")
-        manual = st.text_input(f"Enter Colour (Page {page_number}):", key=f"colour_missing_{page_number}")
-        return manual.upper() if manual else "UNKNOWN"
     except Exception as e:
         st.error(f"Error extracting colour: {str(e)}")
         return "UNKNOWN"
@@ -337,7 +325,7 @@ def extract_data_from_pdf(file):
         valid_barcodes = [b for b in all_barcodes if b not in excluded]
 
         result = [{
-            "Order_ID": order_id.group(1).strip() if order_id else "UNKNOWN",
+            "Order_ID": order_id.group(1].strip() if order_id else "UNKNOWN",
             "Style": style_code.group() if style_code else "UNKNOWN",
             "Colour": colour,
             "Supplier_product_code": supplier_code.group(1).strip() if supplier_code else "UNKNOWN",
