@@ -191,7 +191,7 @@ def load_material_translations():
     - If the remote sheet is unreachable (404/HTTP error), return a safe fallback
       DataFrame containing at least 'Cotton' entries for AL and MK so the UI won't break.
     """
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
     try:
         # Try to load remotely (pandas will raise if 404 or other network issues)
         df = pd.read_csv(url)
@@ -736,3 +736,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
