@@ -185,26 +185,47 @@ def load_product_translations():
 
 @st.cache_data(ttl=600)
 def load_material_translations():
+    """
+    Load material translations from Google Sheets.
+    - Only AL and MK languages are returned (per requirement).
+    - If the remote sheet is unreachable (404/HTTP error), return a safe fallback
+      DataFrame containing at least 'Cotton' entries for AL and MK so the UI won't break.
+    """
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
     try:
-        # NOTE: Only AL and MK are loaded per requested change
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
+        # Try to load remotely (pandas will raise if 404 or other network issues)
         df = pd.read_csv(url)
         if df.empty:
-            st.error("Material translations sheet is empty")
-            return pd.DataFrame()
+            st.warning("Material translations sheet loaded but is empty — using fallback materials.")
+            raise ValueError("Empty sheet")
+
+        # Build dataframe with only AL and MK translations (if columns exist)
         material_translations = []
-        # Only include AL and MK translations now
         for _, row in df.iterrows():
+            name = row.get('Name') if 'Name' in row else row.iloc[0] if len(row) > 0 else None
+            if not name:
+                continue
             for lang in ['AL', 'MK']:
+                translation = row.get(lang, "")
                 material_translations.append({
-                    'material': row['Name'],
+                    'material': name,
                     'language': lang,
-                    'translation': row.get(lang, "")
+                    'translation': translation if pd.notna(translation) else ""
                 })
+        if not material_translations:
+            raise ValueError("No material rows produced")
+
         return pd.DataFrame(material_translations)
+
     except Exception as e:
-        st.error(f"Failed to load material translations: {str(e)}")
-        return pd.DataFrame()
+        # Catch HTTPError, ValueError, pandas errors, etc.
+        st.warning(f"Could not load material translations from Google Sheets ({e}). Using fallback with 'Cotton' only.")
+        fallback = [
+            {'material': 'Cotton', 'language': 'AL', 'translation': 'Cotton'},
+            {'material': 'Cotton', 'language': 'MK', 'translation': 'Cotton'}
+        ]
+        return pd.DataFrame(fallback)
+
 
 # ==================== Helpers ====================
 def format_number(value, currency):
@@ -715,3 +736,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
