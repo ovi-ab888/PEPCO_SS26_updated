@@ -186,18 +186,20 @@ def load_product_translations():
 @st.cache_data(ttl=600)
 def load_material_translations():
     try:
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
+        # NOTE: Only AL and MK are loaded per requested change
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
         df = pd.read_csv(url)
         if df.empty:
             st.error("Material translations sheet is empty")
             return pd.DataFrame()
         material_translations = []
+        # Only include AL and MK translations now
         for _, row in df.iterrows():
-            for lang in ['AL', 'BG', 'MK', 'RS']:
+            for lang in ['AL', 'MK']:
                 material_translations.append({
                     'material': row['Name'],
                     'language': lang,
-                    'translation': row[lang]
+                    'translation': row.get(lang, "")
                 })
         return pd.DataFrame(material_translations)
     except Exception as e:
@@ -380,7 +382,7 @@ def extract_data_from_pdf(file):
         excluded = set(re.findall(r"barcode:\s*(\d{13});", page3))
         valid_barcodes = [b for b in all_barcodes if b not in excluded]
 
-        result = [{
+        result = [({
             "Order_ID": order_id.group(1).strip() if order_id else "UNKNOWN",
             "Style": style_code.group() if style_code else "UNKNOWN",
             "Colour": colour,
@@ -393,7 +395,7 @@ def extract_data_from_pdf(file):
             "Style_Merch_Season": f"STYLE {style_code.group()} • {style_suffix} • Batch No./" if style_code else "STYLE UNKNOWN",
             "Batch": f"Data e prodhimit: {batch}",
             "barcode": barcode
-        } for sku, barcode in zip(skus, valid_barcodes)]
+        }) for sku, barcode in zip(skus, valid_barcodes)]
 
         return result
     except Exception as e:
@@ -406,6 +408,7 @@ def format_product_translations(product_name, translation_row,
                                 material_compositions=None):
     """Return one big multilingual string with optional material names or composition% appended."""
     formatted = []
+    # Keep BiH and RS country suffixes (RS included as requested)
     country_suffixes = {
         'BiH': " Sastav materijala na ušivenoj etiketi.",
         'RS': " Sastav materijala nalazi se na ušivenoj etiketi.",
@@ -416,6 +419,7 @@ def format_product_translations(product_name, translation_row,
     combined_languages = {
         'ES': f"{translation_row['ES']} / {translation_row['ES_CA']}" if pd.notna(translation_row.get('ES_CA')) else translation_row.get('ES')
     }
+    # Include BG and RS in language order per your request
     language_order = [
         'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES',
         'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK',
@@ -430,7 +434,8 @@ def format_product_translations(product_name, translation_row,
         else:
             text = product_name
 
-        if selected_materials and material_translations and lang in ['AL', 'BG', 'MK', 'RS']:
+        # For material composition/translation only AL & MK are available from material_translations
+        if selected_materials and material_translations and lang in ['AL', 'MK']:
             # Prefer composition text if available
             composition_text = (material_compositions or {}).get(lang, "")
             names_text = material_translations.get(lang, "")
@@ -476,7 +481,17 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     filtered = translations_df[translations_df['DEPARTMENT'] == selected_dept]
     products = filtered['PRODUCT_NAME'].dropna().unique().tolist()
     with c2: product_type = st.selectbox("Select Product Type", options=products, key="ui_product")
-    with c3: washing_code_key = st.selectbox("Select Washing Code", options=list(WASHING_CODES.keys()), key="ui_wash")
+
+    # ---- Washing code: default to '9' as requested ----
+    washing_options = list(WASHING_CODES.keys())
+    washing_default_index = 0
+    try:
+        washing_default_index = washing_options.index('9')
+    except ValueError:
+        washing_default_index = 0
+    with c3:
+        washing_code_key = st.selectbox("Select Washing Code", options=washing_options, index=washing_default_index, key="ui_wash")
+
     with c4: pln_price_raw = st.text_input("Enter PLN Price", key="ui_pln_price")
 
     pln_price = None
@@ -492,9 +507,15 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
     # ----- Material Composition (auto rows to reach 100%, max 5) -----
     st.markdown("### Material Composition (%)")
+    # Default rows and data: default Cotton = 100% selected as requested
     if "mat_rows" not in st.session_state: st.session_state.mat_rows = 1
-    if "mat_data" not in st.session_state: st.session_state.mat_data = [{"mat": None, "pct": 0}]
+    if "mat_data" not in st.session_state:
+        st.session_state.mat_data = [{"mat": "Cotton", "pct": 100}]
+
     materials_list = material_translations_df['material'].dropna().unique().tolist() if not material_translations_df.empty else []
+    # Ensure Cotton appears in materials_list (so selectbox index finds it). If not present, add it as option.
+    if "Cotton" not in materials_list:
+        materials_list = ["Cotton"] + materials_list
 
     def _ensure_row(i):
         while i >= len(st.session_state.mat_data):
@@ -515,7 +536,11 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             )
         with cB:
             cur_pct = st.session_state.mat_data[i]["pct"]
-            default_pct = 100 if (i == 0 and not cur_pct) else min(cur_pct, remain)
+            default_pct = 100 if (i == 0 and not cur_pct and st.session_state.mat_data[i]["mat"] == "Cotton") else min(cur_pct, remain)
+            # For the initial default Cotton=100 case we want to set value to 100
+            if i == 0 and st.session_state.mat_data[i]["mat"] == "Cotton" and cur_pct in (None, 0):
+                default_pct = 100
+                st.session_state.mat_data[i]["pct"] = 100
             st.session_state.mat_data[i]["pct"] = st.number_input(
                 "Composition (%)" if i == 0 else f"Composition (%) #{i+1}",
                 min_value=0, max_value=remain, step=1, value=default_pct, key=f"mat_pct_{i}"
@@ -541,13 +566,13 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         st.error("⚠️ Total exceeds 100%")
     st.write(f"**Total: {running_total}%**")
 
-    # Build translations for selected materials
+    # Build translations for selected materials (only AL & MK)
     selected_materials = [r["mat"] for r in valid_rows]
     cotton_value = "Y" if (len(valid_rows) == 1 and (valid_rows[0]["mat"] or "").lower() == "cotton" and valid_rows[0]["pct"] == 100) else ""
 
     material_trans_dict, material_compositions = {}, {}
     if selected_materials and not material_translations_df.empty:
-        for lang in ['AL','BG','MK','RS']:
+        for lang in ['AL','MK']:
             names, comp = [], []
             for r in valid_rows:
                 t = material_translations_df[
@@ -687,7 +712,6 @@ def main():
 
     st.markdown("---")
     st.caption("This app developed by Ovi")
-
 
 if __name__ == "__main__":
     main()
