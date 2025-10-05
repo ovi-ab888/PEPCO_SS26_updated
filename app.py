@@ -186,46 +186,50 @@ def load_product_translations():
 @st.cache_data(ttl=600)
 def load_material_translations():
     """
-    Load material translations from Google Sheets.
-    - Only AL and MK languages are returned (per requirement).
-    - If the remote sheet is unreachable (404/HTTP error), return a safe fallback
-      DataFrame containing at least 'Cotton' entries for AL and MK so the UI won't break.
+    Use the exact URL requested to load material translations.
+    Only AL and MK languages will be returned.
+    On HTTP error (404/etc) or other exception, return a safe fallback with Cotton entries.
     """
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
     try:
-        # Try to load remotely (pandas will raise if 404 or other network issues)
         df = pd.read_csv(url)
         if df.empty:
             st.warning("Material translations sheet loaded but is empty — using fallback materials.")
             raise ValueError("Empty sheet")
 
-        # Build dataframe with only AL and MK translations (if columns exist)
         material_translations = []
         for _, row in df.iterrows():
-            name = row.get('Name') if 'Name' in row else row.iloc[0] if len(row) > 0 else None
-            if not name:
+            name = None
+            if 'Name' in row and pd.notna(row['Name']):
+                name = row['Name']
+            else:
+                try:
+                    name = row.iloc[0]
+                except Exception:
+                    name = None
+            if not name or pd.isna(name):
                 continue
             for lang in ['AL', 'MK']:
                 translation = row.get(lang, "")
+                translation = "" if pd.isna(translation) else translation
                 material_translations.append({
                     'material': name,
                     'language': lang,
-                    'translation': translation if pd.notna(translation) else ""
+                    'translation': translation
                 })
+
         if not material_translations:
-            raise ValueError("No material rows produced")
+            raise ValueError("No material rows produced from sheet")
 
         return pd.DataFrame(material_translations)
 
     except Exception as e:
-        # Catch HTTPError, ValueError, pandas errors, etc.
         st.warning(f"Could not load material translations from Google Sheets ({e}). Using fallback with 'Cotton' only.")
         fallback = [
             {'material': 'Cotton', 'language': 'AL', 'translation': 'Cotton'},
             {'material': 'Cotton', 'language': 'MK', 'translation': 'Cotton'}
         ]
         return pd.DataFrame(fallback)
-
 
 # ==================== Helpers ====================
 def format_number(value, currency):
@@ -281,6 +285,26 @@ def get_classification_type(item_class):
     if 'mens outerwear' in ic: return 'b'
     return None
 
+def map_item_class_to_dept_label(item_class):
+    """
+    Map item_class text to the department label you requested (for default select).
+    """
+    if not item_class:
+        return None
+    ic = item_class.lower()
+    if 'baby boys outerwear' in ic or 'baby boys essentials' in ic:
+        return "Baby Boy"
+    if 'baby girls outerwear' in ic or 'baby girls essentials' in ic:
+        return "Baby Girl"
+    if 'younger boys outerwear' in ic or 'older boys outerwear' in ic:
+        return "Boys"
+    if 'younger girls outerwear' in ic or 'older girls outerwear' in ic:
+        return "Girls"
+    if 'ladies outerwear' in ic:
+        return "Women"
+    if 'mens outerwear' in ic:
+        return "Men"
+    return None
 
 def get_dept_value(item_class):
     if not item_class: return ""
@@ -291,7 +315,6 @@ def get_dept_value(item_class):
     if 'ladies outerwear' in ic: return "WOMEN"
     if 'mens outerwear' in ic: return "MEN"
     return ""
-
 
 def modify_collection(collection, item_class):
     if not item_class: return collection
@@ -362,6 +385,14 @@ def extract_data_from_pdf(file):
             return None
         page1 = doc[0].get_text()
 
+        # Item name English extraction (try several patterns)
+        item_name_en = None
+        m_item = re.search(r"Item\s*name\s*English\s*[:\.]{1,}\s*(.+)", page1, re.IGNORECASE)
+        if not m_item:
+            m_item = re.search(r"Item\s*name\s*[:\.]{1,}\s*(.+?)\n", page1, re.IGNORECASE)
+        if m_item:
+            item_name_en = m_item.group(1).strip()
+
         merch_code = re.search(r"Merch\s*code\s*\.{2,}\s*([\w/]+)", page1)
         season = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", page1)
         style_code = re.search(r"\b\d{6}\b", page1)
@@ -415,7 +446,8 @@ def extract_data_from_pdf(file):
             "Colour_SKU": f"{colour} • SKU {sku}",
             "Style_Merch_Season": f"STYLE {style_code.group()} • {style_suffix} • Batch No./" if style_code else "STYLE UNKNOWN",
             "Batch": f"Data e prodhimit: {batch}",
-            "barcode": barcode
+            "barcode": barcode,
+            "Item_name_EN": item_name_en or ""
         }) for sku, barcode in zip(skus, valid_barcodes)]
 
         return result
@@ -429,7 +461,6 @@ def format_product_translations(product_name, translation_row,
                                 material_compositions=None):
     """Return one big multilingual string with optional material names or composition% appended."""
     formatted = []
-    # Keep BiH and RS country suffixes (RS included as requested)
     country_suffixes = {
         'BiH': " Sastav materijala na ušivenoj etiketi.",
         'RS': " Sastav materijala nalazi se na ušivenoj etiketi.",
@@ -440,7 +471,6 @@ def format_product_translations(product_name, translation_row,
     combined_languages = {
         'ES': f"{translation_row['ES']} / {translation_row['ES_CA']}" if pd.notna(translation_row.get('ES_CA')) else translation_row.get('ES')
     }
-    # Include BG and RS in language order per your request
     language_order = [
         'AL', 'BG', 'BiH', 'CZ', 'DE', 'EE', 'ES',
         'GR', 'HR', 'HU', 'IT', 'LT', 'LV', 'MK',
@@ -457,7 +487,6 @@ def format_product_translations(product_name, translation_row,
 
         # For material composition/translation only AL & MK are available from material_translations
         if selected_materials and material_translations and lang in ['AL', 'MK']:
-            # Prefer composition text if available
             composition_text = (material_compositions or {}).get(lang, "")
             names_text = material_translations.get(lang, "")
             if composition_text:
@@ -488,6 +517,11 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         return
     df = pd.DataFrame(result_data)
 
+    # Get inferred defaults from PDF (first row)
+    first_row = result_data[0] if len(result_data) > 0 else {}
+    pdf_item_class = first_row.get("Item_classification", "")
+    pdf_item_name_en = (first_row.get("Item_name_EN") or "").strip()
+
     # Merge extra Order_IDs from other PDFs
     if extra_order_ids:
         try:
@@ -498,10 +532,33 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     # ----- UI Row: 4 columns (Dept, Product, Washing, PLN) -----
     c1, c2, c3, c4 = st.columns(4)
     depts = translations_df['DEPARTMENT'].dropna().unique().tolist()
-    with c1: selected_dept = st.selectbox("Select Department", options=depts, key="ui_dept")
+
+    # Determine default department option (map using user's mapping)
+    default_dept_label = map_item_class_to_dept_label(pdf_item_class)
+    # Try to find default_dept_label in available depts list (case-insensitive)
+    default_dept_index = 0
+    if default_dept_label:
+        for i, d in enumerate(depts):
+            if str(d).strip().lower() == str(default_dept_label).strip().lower():
+                default_dept_index = i
+                break
+
+    with c1:
+        selected_dept = st.selectbox("Select Department", options=depts, index=default_dept_index, key="ui_dept")
+
     filtered = translations_df[translations_df['DEPARTMENT'] == selected_dept]
     products = filtered['PRODUCT_NAME'].dropna().unique().tolist()
-    with c2: product_type = st.selectbox("Select Product Type", options=products, key="ui_product")
+
+    # Determine default product type from PDF Item_name_EN
+    default_product_index = 0
+    if pdf_item_name_en:
+        for i, p in enumerate(products):
+            if str(p).strip().lower() == pdf_item_name_en.strip().lower():
+                default_product_index = i
+                break
+
+    with c2:
+        product_type = st.selectbox("Select Product Type", options=products, index=default_product_index, key="ui_product")
 
     # ---- Washing code: default to '9' as requested ----
     washing_options = list(WASHING_CODES.keys())
@@ -581,6 +638,19 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     if running_total >= 100 and st.session_state.mat_rows > len(valid_rows):
         st.session_state.mat_rows = len(valid_rows)
 
+    # Determine cotton flag: only true when single row and it's 100% Cotton
+    selected_materials = [r["mat"] for r in valid_rows]
+    cotton_value = ""
+    if len(valid_rows) == 1:
+        mat0 = (valid_rows[0]["mat"] or "").strip().lower()
+        pct0 = valid_rows[0]["pct"]
+        try:
+            pct0_int = int(pct0)
+        except Exception:
+            pct0_int = 0
+        if mat0 == "cotton" and pct0_int == 100:
+            cotton_value = "Y"
+
     if st.session_state.mat_rows == 1 and valid_rows and valid_rows[0]["pct"] == 100 and (valid_rows[0]["mat"] or "").lower() == "cotton":
         st.info("✅ 100% selected — আর নতুন material প্রয়োজন নেই. (Cotton flag will be Y)")
     elif running_total > 100:
@@ -588,9 +658,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     st.write(f"**Total: {running_total}%**")
 
     # Build translations for selected materials (only AL & MK)
-    selected_materials = [r["mat"] for r in valid_rows]
-    cotton_value = "Y" if (len(valid_rows) == 1 and (valid_rows[0]["mat"] or "").lower() == "cotton" and valid_rows[0]["pct"] == 100) else ""
-
     material_trans_dict, material_compositions = {}, {}
     if selected_materials and not material_translations_df.empty:
         for lang in ['AL','MK']:
@@ -609,7 +676,12 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
     # Enrich DataFrame
     df['Dept'] = df['Item_classification'].apply(get_dept_value)
-    df['Cotton'] = cotton_value
+    if cotton_value == "Y":
+        df['Cotton'] = cotton_value
+    else:
+        if 'Cotton' in df.columns:
+            df = df.drop(columns=['Cotton'])
+
     df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
 
     product_row = filtered[filtered['PRODUCT_NAME'] == product_type]
@@ -634,8 +706,12 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
                 "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
                 "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
-                "RSD","HUF","product_name","Dept","Cotton"
+                "RSD","HUF","product_name","Dept"
             ]
+
+            # Add Cotton column to final output only if present in df
+            if 'Cotton' in df.columns:
+                final_cols.append("Cotton")
 
             st.success("✅ Done!")
             st.subheader("Edit Before Download")
@@ -736,4 +812,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
