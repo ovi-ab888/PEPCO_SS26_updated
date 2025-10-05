@@ -171,10 +171,7 @@ def load_price_data():
 @st.cache_data(ttl=600)
 def load_product_translations():
     try:
-        sheet_id = "1ue68TSJQQedKa7sVBB4syOc0OXJNaLS7p9vSnV52mKA"
-        sheet_name = "SS26 Product_Name"
-        encoded_sheet_name = requests.utils.quote(sheet_name)
-        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
+url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
         df = pd.read_csv(url)
         if df.empty:
             st.error("Loaded translations but sheet appears empty")
@@ -185,47 +182,26 @@ def load_product_translations():
 
 @st.cache_data(ttl=600)
 def load_material_translations():
-    """
-    Load material translations from Google Sheets.
-    - Only AL and MK languages are returned (per requirement).
-    - If the remote sheet is unreachable (404/HTTP error), return a safe fallback
-      DataFrame containing at least 'Cotton' entries for AL and MK so the UI won't break.
-    """
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
     try:
-        # Try to load remotely (pandas will raise if 404 or other network issues)
+        # NOTE: Only AL and MK are loaded per requested change
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
         df = pd.read_csv(url)
         if df.empty:
-            st.warning("Material translations sheet loaded but is empty — using fallback materials.")
-            raise ValueError("Empty sheet")
-
-        # Build dataframe with only AL and MK translations (if columns exist)
+            st.error("Material translations sheet is empty")
+            return pd.DataFrame()
         material_translations = []
+        # Only include AL and MK translations now
         for _, row in df.iterrows():
-            name = row.get('Name') if 'Name' in row else row.iloc[0] if len(row) > 0 else None
-            if not name:
-                continue
             for lang in ['AL', 'MK']:
-                translation = row.get(lang, "")
                 material_translations.append({
-                    'material': name,
+                    'material': row['Name'],
                     'language': lang,
-                    'translation': translation if pd.notna(translation) else ""
+                    'translation': row.get(lang, "")
                 })
-        if not material_translations:
-            raise ValueError("No material rows produced")
-
         return pd.DataFrame(material_translations)
-
     except Exception as e:
-        # Catch HTTPError, ValueError, pandas errors, etc.
-        st.warning(f"Could not load material translations from Google Sheets ({e}). Using fallback with 'Cotton' only.")
-        fallback = [
-            {'material': 'Cotton', 'language': 'AL', 'translation': 'Cotton'},
-            {'material': 'Cotton', 'language': 'MK', 'translation': 'Cotton'}
-        ]
-        return pd.DataFrame(fallback)
-
+        st.error(f"Failed to load material translations: {str(e)}")
+        return pd.DataFrame()
 
 # ==================== Helpers ====================
 def format_number(value, currency):
@@ -736,5 +712,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
