@@ -185,12 +185,8 @@ def load_product_translations():
 
 @st.cache_data(ttl=600)
 def load_material_translations():
-    """
-    Use the exact URL requested to load material translations.
-    Only AL and MK languages will be returned.
-    On HTTP error (404/etc) or other exception, return a safe fallback with Cotton entries.
-    """
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
+    try:
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=1096440227&single=true&output=csv"
         df = pd.read_csv(url)
         if df.empty:
             st.warning("Material translations sheet loaded but is empty — using fallback materials.")
