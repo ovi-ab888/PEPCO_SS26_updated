@@ -647,7 +647,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             cotton_value = "Y"
 
     if st.session_state.mat_rows == 1 and valid_rows and valid_rows[0]["pct"] == 100 and (valid_rows[0]["mat"] or "").lower() == "cotton":
-        st.info("✅ 100% selected — আর নতুন material প্রয়োজন নেই. (Cotton flag will be Y)")
+        st.info("✅ 100% selected")
     elif running_total > 100:
         st.error("⚠️ Total exceeds 100%")
     st.write(f"**Total: {running_total}%**")
@@ -807,4 +807,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
