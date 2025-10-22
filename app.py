@@ -704,7 +704,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
                 "RSD","HUF","product_name","Dept","Season"
             ]
-
+          # 🧩 Fix: Include Cotton column if exists
+if 'Cotton' in df.columns:
+    final_cols.append("Cotton")
+  
             for col in final_cols:
                 if col not in df.columns:
                     df[col] = ""
@@ -820,6 +823,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
