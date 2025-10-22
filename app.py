@@ -585,14 +585,19 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 df[cur] = currency_values.get(cur, "")
             df['PLN'] = format_number(pln_price, 'PLN')
 
-            final_cols = [
-                "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
-                "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
-                "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
-                "RSD","HUF","product_name","Dept","Season"
-            ]
+final_cols = [
+    "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
+    "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
+    "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
+    "RSD","HUF","product_name","Dept","Season"
+]
 
-            st.success("✅ Done!")
+# 🧩 FIX: ensure all columns exist before slicing
+for col in final_cols:
+    if col not in df.columns:
+        df[col] = ""
+
+st.success("✅ Done!")
             st.subheader("Edit Before Download")
             edited_df = st.data_editor(df[final_cols])
 
@@ -702,6 +707,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
