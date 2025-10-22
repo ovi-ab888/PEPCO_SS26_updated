@@ -327,7 +327,7 @@ def extract_colour_from_page2(text, page_number=1):
     "ORDERED", "SIZES", "TPG", "TPX", "USD", "NIP", "PEPCO",
     "Poland", "ul. Strzeszyńska 73A, 60-479 Poznań", "NIP 782-21-31-157",
     # 🧩 Extra skip keywords for clothing sizes
-    "XS", "S", "M", "L", "XL", "XXL", "XXXL"
+    "XS", "S", "M", "L", "XL", "XXL", "XXXL", "- TP"
 ]
 
         filtered = [
@@ -823,6 +823,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
