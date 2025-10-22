@@ -601,29 +601,32 @@ st.success("✅ Done!")
 st.subheader("Edit Before Download")
 edited_df = st.data_editor(df[final_cols])
 
+csv_buffer = StringIO()
+writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
+writer.writerow(final_cols)
+for row in edited_df.itertuples(index=False):
+    writer.writerow(row)
 
-            csv_buffer = StringIO()
-            writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
-            writer.writerow(final_cols)
-            for row in edited_df.itertuples(index=False):
-                writer.writerow(row)
+# ---------- Custom CSV Filename ----------
+first_row = df.iloc[0]
+season_val = first_row.get("Season", "UNKNOWN").upper()  # ✅ Correct Season source
 
-            # ---------- Custom CSV Filename ----------
-            first_row = df.iloc[0]
-            season_val = first_row.get("Season", "UNKNOWN").upper()  # ✅ Correct Season source
-            all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
-            sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
-            supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
-            style_val = first_row.get("Style", "UNKNOWN")
+# Combine all SKUs
+all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
+sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
 
-            custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
+style_val = first_row.get("Style", "UNKNOWN")
 
-            st.download_button(
-                "📥 Download CSV",
-                csv_buffer.getvalue().encode('utf-8-sig'),
-                file_name=custom_filename,
-                mime="text/csv"
-            )
+custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+
+st.download_button(
+    "📥 Download CSV",
+    csv_buffer.getvalue().encode('utf-8-sig'),
+    file_name=custom_filename,
+    mime="text/csv"
+)
+
         else:
             st.warning("Processing stopped - valid PLN price not found")
 
@@ -708,6 +711,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
