@@ -507,27 +507,31 @@ def format_product_translations(product_name, translation_row,
 # ==================== Main workflow ====================
 
 def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
+    # Load references
     translations_df = load_product_translations()
     material_translations_df = load_material_translations()
     if not (uploaded_pdf and not translations_df.empty):
         return
 
+    # Parse PDF
     result_data = extract_data_from_pdf(uploaded_pdf)
     if not result_data:
         return
     df = pd.DataFrame(result_data)
 
+    # Get inferred defaults from PDF (first row)
     first_row = result_data[0] if len(result_data) > 0 else {}
     pdf_item_class = first_row.get("Item_classification", "")
     pdf_item_name_en = (first_row.get("Item_name_EN") or "").strip()
 
+    # Merge extra Order_IDs from other PDFs
     if extra_order_ids:
         try:
             df['Order_ID'] = df['Order_ID'].astype(str) + "+" + extra_order_ids
         except Exception:
             pass
 
-    # --- UI inputs ---
+    # ----- UI Row: 4 columns (Dept, Product, Washing, PLN) -----
     c1, c2, c3, c4 = st.columns(4)
     depts = translations_df['DEPARTMENT'].dropna().unique().tolist()
 
@@ -563,6 +567,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     with c4:
         pln_price_raw = st.text_input("Enter PLN Price", key="ui_pln_price")
 
+    # Parse PLN price safely
     pln_price = None
     if pln_price_raw.strip():
         try:
@@ -574,61 +579,58 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.error("❌ Please enter a valid number like 12.50 or 12,50")
             pln_price = None
 
-    # ---- simplified: rest of composition logic stays same ----
-    # (your previous material handling + price + df setup unchanged)
-
     # ============ Price ladder + CSV Export ============
     if pln_price is not None:
         currency_values = find_closest_price(pln_price)
         if currency_values:
-            for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
+            for cur in ['EUR', 'BGN', 'BAM', 'RON', 'CZK', 'MKD', 'RSD', 'HUF']:
                 df[cur] = currency_values.get(cur, "")
             df['PLN'] = format_number(pln_price, 'PLN')
 
-final_cols = [
-    "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
-    "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
-    "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
-    "RSD","HUF","product_name","Dept","Season"
-]
+            final_cols = [
+                "Order_ID", "Style", "Colour", "Supplier_product_code", "Item_classification",
+                "Supplier_name", "today_date", "Collection", "Colour_SKU", "Style_Merch_Season",
+                "Batch", "barcode", "washing_code", "EUR", "BGN", "BAM", "PLN", "RON", "CZK",
+                "MKD", "RSD", "HUF", "product_name", "Dept", "Season"
+            ]
 
-# 🧩 FIX: ensure all columns exist before slicing
-for col in final_cols:
-    if col not in df.columns:
-        df[col] = ""
+            # 🧩 Fix: Ensure all expected columns exist
+            for col in final_cols:
+                if col not in df.columns:
+                    df[col] = ""
 
-st.success("✅ Done!")
-st.subheader("Edit Before Download")
-edited_df = st.data_editor(df[final_cols])
+            st.success("✅ Done!")
+            st.subheader("Edit Before Download")
+            edited_df = st.data_editor(df[final_cols])
 
-csv_buffer = StringIO()
-writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
-writer.writerow(final_cols)
-for row in edited_df.itertuples(index=False):
-    writer.writerow(row)
+            csv_buffer = StringIO()
+            writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
+            writer.writerow(final_cols)
+            for row in edited_df.itertuples(index=False):
+                writer.writerow(row)
 
-# ---------- Custom CSV Filename ----------
-first_row = df.iloc[0]
-season_val = first_row.get("Season", "UNKNOWN").upper()  # ✅ Correct Season source
+            # ---------- Custom CSV Filename ----------
+            first_row = df.iloc[0]
+            season_val = first_row.get("Season", "UNKNOWN").upper()  # ✅ Correct Season source
 
-# Combine all SKUs
-all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
-sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
+            # Combine all SKUs
+            all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
+            sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
 
-supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
-style_val = first_row.get("Style", "UNKNOWN")
+            supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
+            style_val = first_row.get("Style", "UNKNOWN")
 
-custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+            custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
 
-st.download_button(
-    "📥 Download CSV",
-    csv_buffer.getvalue().encode('utf-8-sig'),
-    file_name=custom_filename,
-    mime="text/csv"
-)
-
+            st.download_button(
+                "📥 Download CSV",
+                csv_buffer.getvalue().encode('utf-8-sig'),
+                file_name=custom_filename,
+                mime="text/csv"
+            )
         else:
             st.warning("Processing stopped - valid PLN price not found")
+
 
           
 
@@ -711,6 +713,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
