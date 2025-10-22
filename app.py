@@ -708,21 +708,33 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             for row in edited_df.itertuples(index=False):
                 writer.writerow(row)
 
-            # Custom CSV filename
-            first_row = df.iloc[0]
-            season_val = first_row.get("Style_Merch_Season", "UNKNOWN").split()[-1]
-            sku_val = first_row.get("Colour_SKU", "UNKNOWN").replace("• SKU ", "")
-            supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
-            style_val = first_row.get("Style", "UNKNOWN")
+# ---------- Custom CSV Filename ----------
+# Season extract from regex (already captured in extract_data_from_pdf)
+first_row = df.iloc[0]
 
-            custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+# get season value from Style_Merch_Season field
+season_match = re.search(r"(\w+)?(\d{2})", first_row.get("Style_Merch_Season", ""))
+if season_match:
+    season_val = f"{season_match.group(1) or ''}{season_match.group(2) or ''}".upper()
+else:
+    season_val = "UNKNOWN"
 
-            st.download_button(
-                "📥 Download CSV",
-                csv_buffer.getvalue().encode('utf-8-sig'),
-                file_name=custom_filename,
-                mime="text/csv"
-            )
+# Combine all SKUs from the CSV (SKU_SKU_SKU)
+all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
+sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
+
+supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
+style_val = first_row.get("Style", "UNKNOWN")
+
+custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+
+st.download_button(
+    "📥 Download CSV",
+    csv_buffer.getvalue().encode('utf-8-sig'),
+    file_name=custom_filename,
+    mime="text/csv"
+)
+
         else:
             st.warning("Processing stopped - valid PLN price not found")
 
@@ -808,6 +820,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
