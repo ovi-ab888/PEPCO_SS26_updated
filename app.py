@@ -458,7 +458,6 @@ def extract_data_from_pdf(file):
 
 
 
-
 def format_product_translations(product_name, translation_row,
                                 selected_materials=None, material_translations=None,
                                 material_compositions=None):
@@ -703,6 +702,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
