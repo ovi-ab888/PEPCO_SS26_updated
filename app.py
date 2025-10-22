@@ -507,31 +507,31 @@ def format_product_translations(product_name, translation_row,
 # ==================== Main workflow ====================
 
 def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
-    # Load references
+    # ----- Load References -----
     translations_df = load_product_translations()
     material_translations_df = load_material_translations()
     if not (uploaded_pdf and not translations_df.empty):
         return
 
-    # Parse PDF
+    # ----- Parse PDF -----
     result_data = extract_data_from_pdf(uploaded_pdf)
     if not result_data:
         return
     df = pd.DataFrame(result_data)
 
-    # Get inferred defaults from PDF (first row)
+    # ----- Base Values -----
     first_row = result_data[0] if len(result_data) > 0 else {}
     pdf_item_class = first_row.get("Item_classification", "")
     pdf_item_name_en = (first_row.get("Item_name_EN") or "").strip()
 
-    # Merge extra Order_IDs from other PDFs
+    # ----- Merge extra Order IDs -----
     if extra_order_ids:
         try:
             df['Order_ID'] = df['Order_ID'].astype(str) + "+" + extra_order_ids
         except Exception:
             pass
 
-    # ----- UI Row: 4 columns (Dept, Product, Washing, PLN) -----
+    # ----- UI Columns -----
     c1, c2, c3, c4 = st.columns(4)
     depts = translations_df['DEPARTMENT'].dropna().unique().tolist()
 
@@ -567,7 +567,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     with c4:
         pln_price_raw = st.text_input("Enter PLN Price", key="ui_pln_price")
 
-    # Parse PLN price safely
+    # ----- Parse PLN Price -----
     pln_price = None
     if pln_price_raw.strip():
         try:
@@ -579,7 +579,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.error("❌ Please enter a valid number like 12.50 or 12,50")
             pln_price = None
 
-    # ----- Material Composition (auto rows to reach 100%, max 5) -----
+    # ----- Material Composition -----
     st.markdown("### Material Composition (%)")
     if "mat_rows" not in st.session_state:
         st.session_state.mat_rows = 1
@@ -632,7 +632,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     if running_total >= 100 and st.session_state.mat_rows > len(valid_rows):
         st.session_state.mat_rows = len(valid_rows)
 
-    # Determine cotton flag
     selected_materials = [r["mat"] for r in valid_rows]
     cotton_value = ""
     if len(valid_rows) == 1:
@@ -651,10 +650,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
         st.error("⚠️ Total exceeds 100%")
     st.write(f"**Total: {running_total}%**")
 
-    # Build translations (AL & MK)
+    # ----- Material Translation -----
     material_trans_dict, material_compositions = {}, {}
     if selected_materials and not material_translations_df.empty:
-        for lang in ['AL', 'MK']:
+        for lang in ['AL','MK']:
             names, comp = [], []
             for r in valid_rows:
                 t = material_translations_df[
@@ -670,7 +669,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             if comp:
                 material_compositions[lang] = ", ".join(comp)
 
-    # Enrich DataFrame
     df['Dept'] = df['Item_classification'].apply(get_dept_value)
     if cotton_value == "Y":
         df['Cotton'] = cotton_value
@@ -690,74 +688,58 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
     df['washing_code'] = WASHING_CODES[washing_code_key]
 
-   # ============ Price ladder + CSV Export ============
-if pln_price is not None:
-    currency_values = find_closest_price(pln_price)
-    if currency_values:
-        # 🧮 Add currency values to DataFrame
-        for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
-            df[cur] = currency_values.get(cur, "")
-        df['PLN'] = format_number(pln_price, 'PLN')
+    # ============ Price ladder + CSV Export ============
+    if pln_price is not None:
+        currency_values = find_closest_price(pln_price)
+        if currency_values:
+            for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
+                df[cur] = currency_values.get(cur, "")
+            df['PLN'] = format_number(pln_price, 'PLN')
 
-        # 📄 Define final CSV columns
-        final_cols = [
-            "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
-            "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
-            "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
-            "RSD","HUF","product_name","Dept","Season"
-        ]
+            final_cols = [
+                "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
+                "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
+                "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
+                "RSD","HUF","product_name","Dept","Season"
+            ]
 
-        # 🧩 Fix: Include Cotton column if exists
-        if 'Cotton' in df.columns:
-            final_cols.append("Cotton")
+            # 🧩 Fix: Include Cotton column if exists
+            if 'Cotton' in df.columns:
+                final_cols.append("Cotton")
 
-        # 🧩 Ensure all expected columns exist (avoid KeyError)
-        for col in final_cols:
-            if col not in df.columns:
-                df[col] = ""
+            for col in final_cols:
+                if col not in df.columns:
+                    df[col] = ""
 
-        # ✅ UI feedback and CSV preview
-        st.success("✅ Done!")
-        st.subheader("Edit Before Download")
-        edited_df = st.data_editor(df[final_cols])
+            st.success("✅ Done!")
+            st.subheader("Edit Before Download")
+            edited_df = st.data_editor(df[final_cols])
 
-        # 🧾 Write edited data to CSV buffer
-        csv_buffer = StringIO()
-        writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
-        writer.writerow(final_cols)
-        for row in edited_df.itertuples(index=False):
-            writer.writerow(row)
+            csv_buffer = StringIO()
+            writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
+            writer.writerow(final_cols)
+            for row in edited_df.itertuples(index=False):
+                writer.writerow(row)
 
-        # ---------- Custom CSV Filename ----------
-        first_row = df.iloc[0]
+            # ---------- Custom CSV Filename ----------
+            first_row = df.iloc[0]
+            season_val = first_row.get("Season", "UNKNOWN").upper()
+            all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
+            sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
+            supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
+            style_val = first_row.get("Style", "UNKNOWN")
 
-        # 🧩 Season (from PDF extraction)
-        season_val = first_row.get("Season", "UNKNOWN").upper()
+            custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
 
-        # 🧩 Combine all SKUs (SKU_SKU_SKU)
-        all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
-        sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
-
-        supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
-        style_val = first_row.get("Style", "UNKNOWN")
-
-        # 🧩 Final custom filename
-        custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
-
-        # 📥 Download button
-        st.download_button(
-            "📥 Download CSV",
-            csv_buffer.getvalue().encode('utf-8-sig'),
-            file_name=custom_filename,
-            mime="text/csv"
-        )
-
-    else:
-        st.warning("⚠️ Processing stopped - valid PLN price not found")
-
-
-
-          
+            st.download_button(
+                "📥 Download CSV",
+                csv_buffer.getvalue().encode('utf-8-sig'),
+                file_name=custom_filename,
+                mime="text/csv"
+            )
+        else:
+            st.warning("⚠️ Processing stopped - valid PLN price not found")
+ 
 
 # ==================== Section (Uploader + Reset) ====================
 
@@ -838,6 +820,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
