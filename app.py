@@ -718,23 +718,23 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             for row in edited_df.itertuples(index=False):
                 writer.writerow(row)
 
+# ---- PDF extract করার পর DataFrame তৈরি ----
+result_data = extract_data_from_pdf(uploaded_pdf)
+if not result_data:
+    return
+df = pd.DataFrame(result_data)
+
+# ⚠️ এখন এখানে রাখো ফাইল নাম জেনারেশন ব্লক
 # ===== Custom File Name Builder =====
 try:
-    # Safety: ensure df exists
-    if 'df' not in locals() and 'df' not in globals():
-        raise NameError("DataFrame 'df' not found")
-
-    # Try to get season info from PDF if available
     season_value = "UNKNOWN"
     try:
-        if 'doc' in locals() and doc is not None:
-            season_match = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", doc[0].get_text())
-            if season_match:
-                season_value = f"{season_match.group(1)}{season_match.group(2)}"
+        season_match = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", uploaded_pdf.name)
+        if season_match:
+            season_value = f"{season_match.group(1)}{season_match.group(2)}"
     except Exception:
         pass
 
-    # Extract SKU values
     sku_values = df["Colour_SKU"].str.extract(r"SKU\s*(\d{8})")[0].dropna().unique().tolist()
     all_skus = "_".join(sku_values)
     first_sku = sku_values[0] if len(sku_values) > 0 else "SKU1"
@@ -845,6 +845,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
