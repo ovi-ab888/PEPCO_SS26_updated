@@ -690,56 +690,71 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
     df['washing_code'] = WASHING_CODES[washing_code_key]
 
-    # ============ Price ladder + CSV Export ============
-    if pln_price is not None:
-        currency_values = find_closest_price(pln_price)
-        if currency_values:
-            for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
-                df[cur] = currency_values.get(cur, "")
-            df['PLN'] = format_number(pln_price, 'PLN')
+   # ============ Price ladder + CSV Export ============
+if pln_price is not None:
+    currency_values = find_closest_price(pln_price)
+    if currency_values:
+        # 🧮 Add currency values to DataFrame
+        for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
+            df[cur] = currency_values.get(cur, "")
+        df['PLN'] = format_number(pln_price, 'PLN')
 
-            final_cols = [
-                "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
-                "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
-                "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
-                "RSD","HUF","product_name","Dept","Season"
-            ]
-          # 🧩 Fix: Include Cotton column if exists
-if 'Cotton' in df.columns:
-    final_cols.append("Cotton")
-  
-            for col in final_cols:
-                if col not in df.columns:
-                    df[col] = ""
+        # 📄 Define final CSV columns
+        final_cols = [
+            "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
+            "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
+            "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
+            "RSD","HUF","product_name","Dept","Season"
+        ]
 
-            st.success("✅ Done!")
-            st.subheader("Edit Before Download")
-            edited_df = st.data_editor(df[final_cols])
+        # 🧩 Fix: Include Cotton column if exists
+        if 'Cotton' in df.columns:
+            final_cols.append("Cotton")
 
-            csv_buffer = StringIO()
-            writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
-            writer.writerow(final_cols)
-            for row in edited_df.itertuples(index=False):
-                writer.writerow(row)
+        # 🧩 Ensure all expected columns exist (avoid KeyError)
+        for col in final_cols:
+            if col not in df.columns:
+                df[col] = ""
 
-            # ---------- Custom CSV Filename ----------
-            first_row = df.iloc[0]
-            season_val = first_row.get("Season", "UNKNOWN").upper()
-            all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
-            sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
-            supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
-            style_val = first_row.get("Style", "UNKNOWN")
+        # ✅ UI feedback and CSV preview
+        st.success("✅ Done!")
+        st.subheader("Edit Before Download")
+        edited_df = st.data_editor(df[final_cols])
 
-            custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+        # 🧾 Write edited data to CSV buffer
+        csv_buffer = StringIO()
+        writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
+        writer.writerow(final_cols)
+        for row in edited_df.itertuples(index=False):
+            writer.writerow(row)
 
-            st.download_button(
-                "📥 Download CSV",
-                csv_buffer.getvalue().encode('utf-8-sig'),
-                file_name=custom_filename,
-                mime="text/csv"
-            )
-        else:
-            st.warning("Processing stopped - valid PLN price not found")
+        # ---------- Custom CSV Filename ----------
+        first_row = df.iloc[0]
+
+        # 🧩 Season (from PDF extraction)
+        season_val = first_row.get("Season", "UNKNOWN").upper()
+
+        # 🧩 Combine all SKUs (SKU_SKU_SKU)
+        all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
+        sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
+
+        supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
+        style_val = first_row.get("Style", "UNKNOWN")
+
+        # 🧩 Final custom filename
+        custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+
+        # 📥 Download button
+        st.download_button(
+            "📥 Download CSV",
+            csv_buffer.getvalue().encode('utf-8-sig'),
+            file_name=custom_filename,
+            mime="text/csv"
+        )
+
+    else:
+        st.warning("⚠️ Processing stopped - valid PLN price not found")
+
 
 
           
@@ -823,6 +838,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
