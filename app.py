@@ -690,51 +690,51 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     df['washing_code'] = WASHING_CODES[washing_code_key]
 
     # Price ladder + CSV export
-    if pln_price is not None:
-        currency_values = find_closest_price(pln_price)
-        if currency_values:
-            for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
-                df[cur] = currency_values.get(cur, "")
-            df['PLN'] = format_number(pln_price, 'PLN')
+if pln_price is not None:
+    currency_values = find_closest_price(pln_price)
+    if currency_values:
+        for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
+            df[cur] = currency_values.get(cur, "")
+        df['PLN'] = format_number(pln_price, 'PLN')
 
-            final_cols = [
-                "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
-                "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
-                "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
-                "RSD","HUF","product_name","Dept"
-            ]
+        final_cols = [
+            "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
+            "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
+            "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
+            "RSD","HUF","product_name","Dept"
+        ]
 
-            # Add Cotton column to final output only if present in df
-            if 'Cotton' in df.columns:
-                final_cols.append("Cotton")
+        if 'Cotton' in df.columns:
+            final_cols.append("Cotton")
 
-            st.success("✅ Done!")
-            st.subheader("Edit Before Download")
-            edited_df = st.data_editor(df[final_cols])
+        st.success("✅ Done!")
+        st.subheader("Edit Before Download")
+        edited_df = st.data_editor(df[final_cols])
 
-            csv_buffer = StringIO()
-            writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
-            writer.writerow(final_cols)
-            for row in edited_df.itertuples(index=False):
-                writer.writerow(row)
+        csv_buffer = StringIO()
+        writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
+        writer.writerow(final_cols)
+        for row in edited_df.itertuples(index=False):
+            writer.writerow(row)
 
-# ধরো প্রথম row থেকেই ডেটা নিচ্ছি
-first_row = df.iloc[0]
-season_val = first_row.get("Style_Merch_Season", "UNKNOWN").split()[-1]
-sku_val = first_row.get("Colour_SKU", "UNKNOWN").replace("• SKU ", "")
-supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
-style_val = first_row.get("Style", "UNKNOWN")
+        # 👇 Custom filename logic
+        first_row = df.iloc[0]
+        season_val = first_row.get("Style_Merch_Season", "UNKNOWN").split()[-1]
+        sku_val = first_row.get("Colour_SKU", "UNKNOWN").replace("• SKU ", "")
+        supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
+        style_val = first_row.get("Style", "UNKNOWN")
 
-custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
+        custom_filename = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
 
-st.download_button(
-    "📥 Download CSV",
-    csv_buffer.getvalue().encode('utf-8-sig'),
-    file_name=custom_filename,
-    mime="text/csv"
-)
-        else:
-            st.warning("Processing stopped - valid PLN price not found")
+        st.download_button(
+            "📥 Download CSV",
+            csv_buffer.getvalue().encode('utf-8-sig'),
+            file_name=custom_filename,
+            mime="text/csv"
+        )
+    else:
+        st.warning("Processing stopped - valid PLN price not found")
+
 
 
 # ==================== Section (Uploader + Reset) ====================
@@ -816,5 +816,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
