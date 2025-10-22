@@ -380,7 +380,7 @@ def extract_data_from_pdf(file):
             return None
         page1 = doc[0].get_text()
 
-        # Item name English extraction (try several patterns)
+        # Item name English extraction
         item_name_en = None
         m_item = re.search(r"Item\s*name\s*English\s*[:\.]{1,}\s*(.+)", page1, re.IGNORECASE)
         if not m_item:
@@ -429,6 +429,9 @@ def extract_data_from_pdf(file):
         excluded = set(re.findall(r"barcode:\s*(\d{13});", page3))
         valid_barcodes = [b for b in all_barcodes if b not in excluded]
 
+        # ✅ Add Season field here
+        season_value = f"{season.group(1)}{season.group(2)}" if season else "UNKNOWN"
+
         result = [({
             "Order_ID": order_id.group(1).strip() if order_id else "UNKNOWN",
             "Style": style_code.group() if style_code else "UNKNOWN",
@@ -442,13 +445,15 @@ def extract_data_from_pdf(file):
             "Style_Merch_Season": f"STYLE {style_code.group()} • {style_suffix} • Batch No./" if style_code else "STYLE UNKNOWN",
             "Batch": f"Data e prodhimit: {batch}",
             "barcode": barcode,
-            "Item_name_EN": item_name_en or ""
+            "Item_name_EN": item_name_en or "",
+            "Season": season_value  # ✅ This line adds the real Season to every row
         }) for sku, barcode in zip(skus, valid_barcodes)]
 
         return result
     except Exception as e:
         st.error(f"PDF error: {str(e)}")
         return None
+
 
 
 def format_product_translations(product_name, translation_row,
@@ -813,6 +818,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
