@@ -598,8 +598,9 @@ for col in final_cols:
         df[col] = ""
 
 st.success("✅ Done!")
-            st.subheader("Edit Before Download")
-            edited_df = st.data_editor(df[final_cols])
+st.subheader("Edit Before Download")
+edited_df = st.data_editor(df[final_cols])
+
 
             csv_buffer = StringIO()
             writer = pycsv.writer(csv_buffer, delimiter=';', quoting=pycsv.QUOTE_ALL)
@@ -707,6 +708,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
