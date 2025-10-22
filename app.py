@@ -579,22 +579,132 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             st.error("❌ Please enter a valid number like 12.50 or 12,50")
             pln_price = None
 
+    # ----- Material Composition (auto rows to reach 100%, max 5) -----
+    st.markdown("### Material Composition (%)")
+    if "mat_rows" not in st.session_state:
+        st.session_state.mat_rows = 1
+    if "mat_data" not in st.session_state:
+        st.session_state.mat_data = [{"mat": "Cotton", "pct": 100}]
+
+    materials_list = material_translations_df['material'].dropna().unique().tolist() if not material_translations_df.empty else []
+    if "Cotton" not in materials_list:
+        materials_list = ["Cotton"] + materials_list
+
+    def _ensure_row(i):
+        while i >= len(st.session_state.mat_data):
+            st.session_state.mat_data.append({"mat": None, "pct": 0})
+
+    for i in range(st.session_state.mat_rows):
+        _ensure_row(i)
+        prev_total = sum(r["pct"] for r in st.session_state.mat_data[:i] if r["pct"])
+        remain = max(0, 100 - prev_total)
+        cA, cB = st.columns([3, 1.3])
+        with cA:
+            cur_mat = st.session_state.mat_data[i]["mat"]
+            options = ["—"] + materials_list
+            idx = options.index(cur_mat) if (cur_mat in options) else 0
+            st.session_state.mat_data[i]["mat"] = st.selectbox(
+                "Select Material(s)" if i == 0 else f"Select Material(s) #{i+1}",
+                options, index=idx, key=f"mat_sel_{i}"
+            )
+        with cB:
+            cur_pct = st.session_state.mat_data[i]["pct"]
+            default_pct = 100 if (i == 0 and not cur_pct and st.session_state.mat_data[i]["mat"] == "Cotton") else min(cur_pct, remain)
+            if i == 0 and st.session_state.mat_data[i]["mat"] == "Cotton" and cur_pct in (None, 0):
+                default_pct = 100
+                st.session_state.mat_data[i]["pct"] = 100
+            st.session_state.mat_data[i]["pct"] = st.number_input(
+                "Composition (%)" if i == 0 else f"Composition (%) #{i+1}",
+                min_value=0, max_value=remain, step=1, value=default_pct, key=f"mat_pct_{i}"
+            )
+
+    valid_rows = [r for r in st.session_state.mat_data[:st.session_state.mat_rows]
+                  if r["mat"] not in (None, "—") and r["pct"] > 0]
+    running_total = sum(r["pct"] for r in valid_rows)
+
+    if running_total < 100 and st.session_state.mat_rows < 5:
+        last = st.session_state.mat_data[st.session_state.mat_rows - 1]
+        if last["mat"] not in (None, "—") and last["pct"] > 0:
+            st.session_state.mat_rows += 1
+            _ensure_row(st.session_state.mat_rows - 1)
+            st.rerun()
+
+    if running_total >= 100 and st.session_state.mat_rows > len(valid_rows):
+        st.session_state.mat_rows = len(valid_rows)
+
+    # Determine cotton flag
+    selected_materials = [r["mat"] for r in valid_rows]
+    cotton_value = ""
+    if len(valid_rows) == 1:
+        mat0 = (valid_rows[0]["mat"] or "").strip().lower()
+        pct0 = valid_rows[0]["pct"]
+        try:
+            pct0_int = int(pct0)
+        except Exception:
+            pct0_int = 0
+        if mat0 == "cotton" and pct0_int == 100:
+            cotton_value = "Y"
+
+    if st.session_state.mat_rows == 1 and valid_rows and valid_rows[0]["pct"] == 100 and (valid_rows[0]["mat"] or "").lower() == "cotton":
+        st.info("✅ 100% selected")
+    elif running_total > 100:
+        st.error("⚠️ Total exceeds 100%")
+    st.write(f"**Total: {running_total}%**")
+
+    # Build translations (AL & MK)
+    material_trans_dict, material_compositions = {}, {}
+    if selected_materials and not material_translations_df.empty:
+        for lang in ['AL', 'MK']:
+            names, comp = [], []
+            for r in valid_rows:
+                t = material_translations_df[
+                    (material_translations_df['material'] == r['mat']) &
+                    (material_translations_df['language'] == lang)
+                ]
+                if not t.empty:
+                    tr = t['translation'].iloc[0]
+                    names.append(tr)
+                    comp.append(f"{r['pct']}% {tr}")
+            if names:
+                material_trans_dict[lang] = ", ".join(names)
+            if comp:
+                material_compositions[lang] = ", ".join(comp)
+
+    # Enrich DataFrame
+    df['Dept'] = df['Item_classification'].apply(get_dept_value)
+    if cotton_value == "Y":
+        df['Cotton'] = cotton_value
+    else:
+        if 'Cotton' in df.columns:
+            df = df.drop(columns=['Cotton'])
+
+    df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
+
+    product_row = filtered[filtered['PRODUCT_NAME'] == product_type]
+    if not product_row.empty:
+        df['product_name'] = format_product_translations(
+            product_type, product_row.iloc[0], selected_materials, material_trans_dict, material_compositions
+        )
+    else:
+        df['product_name'] = ""
+
+    df['washing_code'] = WASHING_CODES[washing_code_key]
+
     # ============ Price ladder + CSV Export ============
     if pln_price is not None:
         currency_values = find_closest_price(pln_price)
         if currency_values:
-            for cur in ['EUR', 'BGN', 'BAM', 'RON', 'CZK', 'MKD', 'RSD', 'HUF']:
+            for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
                 df[cur] = currency_values.get(cur, "")
             df['PLN'] = format_number(pln_price, 'PLN')
 
             final_cols = [
-                "Order_ID", "Style", "Colour", "Supplier_product_code", "Item_classification",
-                "Supplier_name", "today_date", "Collection", "Colour_SKU", "Style_Merch_Season",
-                "Batch", "barcode", "washing_code", "EUR", "BGN", "BAM", "PLN", "RON", "CZK",
-                "MKD", "RSD", "HUF", "product_name", "Dept", "Season"
+                "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
+                "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
+                "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
+                "RSD","HUF","product_name","Dept","Season"
             ]
 
-            # 🧩 Fix: Ensure all expected columns exist
             for col in final_cols:
                 if col not in df.columns:
                     df[col] = ""
@@ -611,12 +721,9 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
             # ---------- Custom CSV Filename ----------
             first_row = df.iloc[0]
-            season_val = first_row.get("Season", "UNKNOWN").upper()  # ✅ Correct Season source
-
-            # Combine all SKUs
+            season_val = first_row.get("Season", "UNKNOWN").upper()
             all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
             sku_val = "_".join(all_skus) if all_skus else "UNKNOWN"
-
             supplier_code = first_row.get("Supplier_product_code", "UNKNOWN")
             style_val = first_row.get("Style", "UNKNOWN")
 
@@ -713,6 +820,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
