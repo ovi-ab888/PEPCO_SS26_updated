@@ -718,7 +718,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             for row in edited_df.itertuples(index=False):
                 writer.writerow(row)
 
-            # ===== Custom File Name Builder =====
+# ===== Custom File Name Builder =====
 try:
     # Take season value from PDF extraction (if available)
     season_match = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", doc[0].get_text())
@@ -744,6 +744,8 @@ st.download_button(
     file_name=new_file_name,
     mime="text/csv"
 )
+        else:
+            st.warning("Processing stopped - valid PLN price not found")
 
 
 
@@ -826,6 +828,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
