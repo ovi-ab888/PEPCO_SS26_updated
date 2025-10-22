@@ -745,8 +745,6 @@ st.download_button(
     mime="text/csv"
 )
 
-        else:
-            st.warning("Processing stopped - valid PLN price not found")
 
 
 # ==================== Section (Uploader + Reset) ====================
@@ -828,6 +826,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
