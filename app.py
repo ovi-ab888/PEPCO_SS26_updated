@@ -718,12 +718,33 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             for row in edited_df.itertuples(index=False):
                 writer.writerow(row)
 
-            st.download_button(
-                "📥 Download CSV",
-                csv_buffer.getvalue().encode('utf-8-sig'),
-                file_name=f"{os.path.splitext(uploaded_pdf.name)[0]}.csv",
-                mime="text/csv"
-            )
+            # ===== Custom File Name Builder =====
+try:
+    # Take season value from PDF extraction (if available)
+    season_match = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", doc[0].get_text())
+    season_value = f"{season_match.group(1)}{season_match.group(2)}" if season_match else "UNKNOWN"
+
+    # Extract SKU values
+    sku_values = df["Colour_SKU"].str.extract(r"SKU\s*(\d{8})")[0].dropna().unique().tolist()
+    all_skus = "_".join(sku_values)
+    first_sku = sku_values[0] if len(sku_values) > 0 else "SKU1"
+    second_sku = sku_values[1] if len(sku_values) > 1 else "SKU2"
+
+    supplier_code = df["Supplier_product_code"].iloc[0] if "Supplier_product_code" in df.columns else "SUP"
+    style_value = df["Style"].iloc[0] if "Style" in df.columns else "STYLE"
+
+    new_file_name = f"PEPCO_{season_value}_{first_sku}_{second_sku}_{all_skus}_DATAFILE_{supplier_code}_00_{style_value}.csv"
+except Exception as e:
+    new_file_name = "PEPCO_DATAFILE_ERROR.csv"
+    st.warning(f"⚠️ File name generation failed: {e}")
+
+st.download_button(
+    "📥 Download CSV",
+    csv_buffer.getvalue().encode('utf-8-sig'),
+    file_name=new_file_name,
+    mime="text/csv"
+)
+
         else:
             st.warning("Processing stopped - valid PLN price not found")
 
@@ -807,5 +828,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
