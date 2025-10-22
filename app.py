@@ -738,14 +738,20 @@ except Exception as e:
     new_file_name = "PEPCO_DATAFILE_ERROR.csv"
     st.warning(f"⚠️ File name generation failed: {e}")
 
-st.download_button(
-    "📥 Download CSV",
-    csv_buffer.getvalue().encode('utf-8-sig'),
-    file_name=new_file_name,
-    mime="text/csv"
-)
-        else:
-            st.warning("Processing stopped - valid PLN price not found")
+if pln_price is not None:
+    currency_values = find_closest_price(pln_price)
+    if currency_values:
+        # ... (তোমার CSV তৈরি করার কোড এখানে থাকবে)
+
+        st.download_button(
+            "📥 Download CSV",
+            csv_buffer.getvalue().encode('utf-8-sig'),
+            file_name=new_file_name,
+            mime="text/csv"
+        )
+    else:
+        st.warning("Processing stopped - valid PLN price not found")
+
 
 
 
@@ -828,6 +834,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
