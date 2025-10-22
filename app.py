@@ -720,11 +720,14 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
 # ===== Custom File Name Builder =====
 try:
-    # Take season value from PDF extraction (if available)
-    season_match = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", doc[0].get_text())
-    season_value = f"{season_match.group(1)}{season_match.group(2)}" if season_match else "UNKNOWN"
+    season_value = "UNKNOWN"
+    try:
+        season_match = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", uploaded_pdf.name)
+        if season_match:
+            season_value = f"{season_match.group(1)}{season_match.group(2)}"
+    except Exception:
+        pass
 
-    # Extract SKU values
     sku_values = df["Colour_SKU"].str.extract(r"SKU\s*(\d{8})")[0].dropna().unique().tolist()
     all_skus = "_".join(sku_values)
     first_sku = sku_values[0] if len(sku_values) > 0 else "SKU1"
@@ -834,6 +837,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
