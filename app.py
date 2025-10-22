@@ -323,10 +323,13 @@ def extract_colour_from_page2(text, page_number=1):
     try:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         skip_keywords = [
-            "PURCHASE", "COLOUR", "TOTAL", 'PANTONE', 'SUPPLIER', 'PRICE',
-            'ORDERED', 'SIZES', 'TPG', 'TPX', 'USD', 'NIP', 'PEPCO',
-            'Poland', 'ul. Strzeszyńska 73A, 60-479 Poznań', 'NIP 782-21-31-157'
-        ]
+    "PURCHASE", "COLOUR", "TOTAL", "PANTONE", "SUPPLIER", "PRICE",
+    "ORDERED", "SIZES", "TPG", "TPX", "USD", "NIP", "PEPCO",
+    "Poland", "ul. Strzeszyńska 73A, 60-479 Poznań", "NIP 782-21-31-157",
+    # 🧩 Extra skip keywords for clothing sizes
+    "XS", "S", "M", "L", "XL", "XXL", "XXXL"
+]
+
         filtered = [
             line for line in lines
             if all(k.lower() not in line.lower() for k in skip_keywords)
@@ -820,6 +823,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
