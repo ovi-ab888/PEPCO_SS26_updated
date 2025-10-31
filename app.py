@@ -400,7 +400,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
     # ✅ Auto-fill PLN price
     with c4:
-        pln_price_raw = st.text_input("Enter PLN Price (auto-detected from PDF)", value=(auto_pln or ""), key="ui_pln_price")
+        pln_price_raw = st.text_input("Enter PLN Price", value=(auto_pln or ""), key="ui_pln_price")
 
     # ----- Parse PLN Price & Currency ladder -----
     pln_price = None
@@ -581,6 +581,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
