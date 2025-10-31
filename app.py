@@ -534,8 +534,17 @@ def pepco_section():
 # ==================== MAIN ====================
 def main():
     st.markdown(THEME_CSS, unsafe_allow_html=True)
-    st.title("🧾 PEPCO Automation App")
-    if not check_password(): st.stop()
+
+    # ✅ Safe logo load for Streamlit Cloud (using GitHub raw URL)
+    try:
+        logo_url = "https://raw.githubusercontent.com/ovi-ab888/PEPCO_SS26_updated/main/logo.svg"
+        st.image(logo_url, width=280)
+    except Exception as e:
+        st.write("🧾 PEPCO Automation App")
+
+    st.title("🧾 PEPCO Automation App (Auto Price from PDF)")
+    if not check_password():
+        st.stop()
     pepco_section()
     st.markdown("---")
     st.caption("Built with ❤️ by Ovi")
