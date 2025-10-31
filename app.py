@@ -227,7 +227,7 @@ def load_material_translations():
         return pd.DataFrame(fallback)
 
 # ---------- Helper: extract PL price ----------
-ddef _extract_pl_price(text: str):
+def _extract_pl_price(text: str):
     """
     Detect PLN sales price from the PL row in the sales table.
     Example lines:
@@ -248,6 +248,7 @@ ddef _extract_pl_price(text: str):
     if m:
         return m.group(1).replace(',', '.')
     return None
+
 
 
   
@@ -865,6 +866,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
