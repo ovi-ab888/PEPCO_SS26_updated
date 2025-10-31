@@ -534,15 +534,11 @@ def pepco_section():
 # ==================== MAIN ====================
 def main():
     st.markdown(THEME_CSS, unsafe_allow_html=True)
-
-    # ✅ Show logo if exists
-    from pathlib import Path
-    logo_path = Path(__file__).parent / "logo.svg"
-    if logo_path.exists():
-        st.image(str(logo_path), width=280)
-
-    st.title("🧾 PEPCO Automation App (Auto Price from PDF)")
+    st.title("🧾 PEPCO Automation App")
     if not check_password(): st.stop()
     pepco_section()
     st.markdown("---")
     st.caption("Built with ❤️ by Ovi")
+
+if __name__ == "__main__":
+    main()
