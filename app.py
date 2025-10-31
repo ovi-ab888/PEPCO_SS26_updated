@@ -226,7 +226,13 @@ def load_material_translations():
         ]
         return pd.DataFrame(fallback)
 
-# ==================== Helpers ====================
+# ---------- Helper: extract PL price ----------
+def _extract_pl_price(text: str):
+    m = re.search(r'(?mi)^\s*PL\b[^\n\r]*?(\d{1,3}(?:[.,]\d{2})?)', text)
+    if m:
+        return m.group(1).replace(',', '.')
+    return None
+  
 def format_number(value, currency):
     try:
         if isinstance(value, str):
@@ -428,12 +434,22 @@ def extract_data_from_pdf(file):
 
         colour = extract_colour_from_page2(doc[1].get_text())
         page3 = doc[2].get_text()
+        page4 = doc[3].get_text() if len(doc) > 3 else ""
+
+        # ✅ Auto PLN Price detection from PL row (page 3 or 4)
+        def _extract_pl_price(text: str):
+            m = re.search(r'(?mi)^\s*PL\b[^\n\r]*?(\d{1,3}(?:[.,]\d{2})?)', text)
+            if m:
+                return m.group(1).replace(',', '.')
+            return None
+
+        auto_pln_price = _extract_pl_price(page3) or _extract_pl_price(page4)
+
         skus = re.findall(r"\b\d{8}\b", page3)
         all_barcodes = re.findall(r"\b\d{13}\b", page3)
         excluded = set(re.findall(r"barcode:\s*(\d{13});", page3))
         valid_barcodes = [b for b in all_barcodes if b not in excluded]
 
-        # ✅ Season value
         season_value = f"{season.group(1)}{season.group(2)}" if season else "UNKNOWN"
 
         result = [({
@@ -450,13 +466,16 @@ def extract_data_from_pdf(file):
             "Batch": f"Data e prodhimit: {batch}",
             "barcode": barcode,
             "Item_name_EN": item_name_en or "",
-            "Season": season_value  # ✅ added Season field
+            "Season": season_value
         }) for sku, barcode in zip(skus, valid_barcodes)]
 
-        return result
+        # ✅ return dictionary (data + auto price)
+        return {"data": result, "pln_price": auto_pln_price}
+
     except Exception as e:
         st.error(f"PDF error: {str(e)}")
         return None
+
 
 
 
@@ -509,31 +528,31 @@ def format_product_translations(product_name, translation_row,
 # ==================== Main workflow ====================
 
 def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
-    # ----- Load References -----
     translations_df = load_product_translations()
     material_translations_df = load_material_translations()
     if not (uploaded_pdf and not translations_df.empty):
         return
 
-    # ----- Parse PDF -----
-    result_data = extract_data_from_pdf(uploaded_pdf)
-    if not result_data:
+    # ✅ updated extract structure
+    data_obj = extract_data_from_pdf(uploaded_pdf)
+    if not data_obj:
         return
-    df = pd.DataFrame(result_data)
 
-    # ----- Base Values -----
+    result_data = data_obj["data"]
+    auto_pln = data_obj.get("pln_price")  # detected price from PL row
+
+    df = pd.DataFrame(result_data)
     first_row = result_data[0] if len(result_data) > 0 else {}
     pdf_item_class = first_row.get("Item_classification", "")
     pdf_item_name_en = (first_row.get("Item_name_EN") or "").strip()
 
-    # ----- Merge extra Order IDs -----
+    # Merge extra Order IDs
     if extra_order_ids:
         try:
             df['Order_ID'] = df['Order_ID'].astype(str) + "+" + extra_order_ids
         except Exception:
             pass
 
-    # ----- UI Columns -----
     c1, c2, c3, c4 = st.columns(4)
     depts = translations_df['DEPARTMENT'].dropna().unique().tolist()
 
@@ -566,8 +585,14 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     with c3:
         washing_code_key = st.selectbox("Select Washing Code", options=washing_options, index=washing_default_index, key="ui_wash")
 
+    # ✅ Auto-fill PLN price if found
     with c4:
-        pln_price_raw = st.text_input("Enter PLN Price", key="ui_pln_price")
+        pln_price_raw = st.text_input(
+            "Enter PLN Price (auto-detected from PDF)",
+            value=(auto_pln or ""),
+            key="ui_pln_price"
+        )
+
 
     # ----- Parse PLN Price -----
     pln_price = None
@@ -822,6 +847,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
