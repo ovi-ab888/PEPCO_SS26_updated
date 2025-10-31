@@ -228,10 +228,25 @@ def load_material_translations():
 
 # ---------- Helper: extract PL price ----------
 def _extract_pl_price(text: str):
-    m = re.search(r'(?mi)^\s*PL\b[^\n\r]*?(\d{1,3}(?:[.,]\d{2})?)', text)
+    """
+    Detect PLN sales price from PL row in price table.
+    Example line: PL  T-shirt dziewczęcy  15.00  15.00
+    """
+    # Normalize weird spaces
+    text = text.replace('\xa0', ' ').replace('\u202f', ' ')
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for ln in lines:
+        # match line starting with PL or containing 'PL ' then a number
+        if re.match(r"^PL\b", ln, re.IGNORECASE):
+            m = re.search(r"(\d{1,3}(?:[.,]\d{2}))", ln)
+            if m:
+                return m.group(1).replace(",", ".")
+    # fallback: search anywhere in text with 'PL' and price in same line
+    m = re.search(r"PL[^\n\r]{0,40}?(\d{1,3}(?:[.,]\d{2}))", text, re.IGNORECASE)
     if m:
-        return m.group(1).replace(',', '.')
+        return m.group(1).replace(",", ".")
     return None
+
   
 def format_number(value, currency):
     try:
@@ -847,6 +862,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
