@@ -227,33 +227,26 @@ def load_material_translations():
         return pd.DataFrame(fallback)
 
 # ---------- Helper: extract PL price ----------
-def _extract_pl_price(text: str):
+ddef _extract_pl_price(text: str):
     """
-    Try to detect the PLN sales price from the PL row in the table
-    even if spacing or encoding is inconsistent.
+    Detect PLN sales price from the PL row in the sales table.
+    Example lines:
+      PL T-shirt dziewczęcy 15.00 15.00
+      PL Sweter damski 35.00 35.00
     """
-    # Normalize common invisible characters
+    # Normalize non-breaking spaces & extra spacing
     text = text.replace('\xa0', ' ').replace('\u202f', ' ')
-    # Remove multiple spaces
-    text = re.sub(r'\s+', ' ', text)
-
-    # --- Primary: full-line check (e.g. "PL T-shirt dziewczęcy 15.00 15.00")
-    for line in text.splitlines():
-        if line.strip().upper().startswith("PL "):
-            m = re.search(r'(\d{1,4}(?:[.,]\d{2}))', line)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for ln in lines:
+        if re.match(r'^\s*PL\b', ln, re.IGNORECASE):
+            # capture last numeric pattern like 15.00 / 30,00 etc
+            m = re.search(r'(\d{1,4}(?:[.,]\d{2}))\s*$', ln)
             if m:
                 return m.group(1).replace(',', '.')
-
-    # --- Secondary: search “PL” followed by a price anywhere in text
-    m = re.search(r'PL[^0-9]{0,40}?(\d{1,4}(?:[.,]\d{2}))', text, re.IGNORECASE)
+    # fallback search in whole text
+    m = re.search(r'PL[^\n\r]{0,50}?(\d{1,4}(?:[.,]\d{2}))', text, re.IGNORECASE)
     if m:
         return m.group(1).replace(',', '.')
-
-    # --- Tertiary: last-resort fallback (price near 'PLN' or 'PL ')
-    m = re.search(r'(?:PLN|PL)[^0-9]{0,10}?(\d{1,4}(?:[.,]\d{2}))', text, re.IGNORECASE)
-    if m:
-        return m.group(1).replace(',', '.')
-
     return None
 
 
@@ -872,6 +865,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
