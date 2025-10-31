@@ -175,19 +175,49 @@ def modify_collection(collection, item_class):
 def extract_colour_from_page2(text, page_number=1):
     try:
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-        skip = ["PURCHASE","COLOUR","TOTAL","PANTONE","SUPPLIER","PRICE","ORDERED","SIZES","TPG","TPX","USD","NIP","PEPCO","Poland","Poznań"]
-        filtered = [ln for ln in lines if all(k.lower() not in ln.lower() for k in skip) and not re.match(r"^[\d\s,./-]+$", ln)]
+        skip_keywords = [
+            "PURCHASE", "COLOUR", "TOTAL", "PANTONE", "SUPPLIER", "PRICE",
+            "ORDERED", "SIZES", "TPG", "TPX", "USD", "NIP", "PEPCO",
+            "Poland", "Poznań"
+        ]
+
+        # 🔹 size keywords to skip
+        skip_sizes = ["XS", "S", "M", "L", "XL", "XXL", "3XL"]
+
+        filtered = []
+        for ln in lines:
+            # Skip lines containing unwanted keywords
+            if any(k.lower() in ln.lower() for k in skip_keywords):
+                continue
+
+            # Skip lines that are just numbers (1,2,3)
+            if re.match(r"^\s*\d+\s*$", ln):
+                continue
+
+            # Skip lines that are purely numeric/symbols
+            if re.match(r"^[\d\s,./-]+$", ln):
+                continue
+
+            # Skip size names (XS, S, M, L, XL, XXL, 3XL)
+            if ln.strip().upper() in skip_sizes:
+                continue
+
+            filtered.append(ln)
+
         if filtered:
-            colour = re.sub(r'[\d\.\)\(]+','', filtered[0]).strip().upper()
+            colour = re.sub(r'[\d\.\)\(]+', '', filtered[0]).strip().upper()
             if "MANUAL" in colour:
                 manual = st.text_input(f"Enter Colour (Page {page_number})", key=f"colour_manual_{page_number}")
                 return (manual or "UNKNOWN").upper()
             return colour or "UNKNOWN"
+
         st.warning(f"⚠️ Page {page_number}: Colour information not found in PDF")
         manual = st.text_input(f"Enter Colour (Page {page_number}):", key=f"colour_missing_{page_number}")
         return (manual or "UNKNOWN").upper()
+
     except Exception:
         return "UNKNOWN"
+
 
 # ==================== PRICE DETECTION (Robust) ====================
 def _extract_pl_price(text: str):
@@ -551,5 +581,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
