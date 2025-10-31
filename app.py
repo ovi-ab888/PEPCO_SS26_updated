@@ -542,7 +542,7 @@ def main():
     except Exception as e:
         st.write("🧾 PEPCO Automation App")
 
-    st.title("🧾 PEPCO Automation App (Auto Price from PDF)")
+
     if not check_password():
         st.stop()
     pepco_section()
@@ -551,3 +551,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
