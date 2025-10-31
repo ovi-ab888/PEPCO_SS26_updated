@@ -229,23 +229,33 @@ def load_material_translations():
 # ---------- Helper: extract PL price ----------
 def _extract_pl_price(text: str):
     """
-    Detect PLN sales price from PL row in price table.
-    Example line: PL  T-shirt dziewczęcy  15.00  15.00
+    Try to detect the PLN sales price from the PL row in the table
+    even if spacing or encoding is inconsistent.
     """
-    # Normalize weird spaces
+    # Normalize common invisible characters
     text = text.replace('\xa0', ' ').replace('\u202f', ' ')
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    for ln in lines:
-        # match line starting with PL or containing 'PL ' then a number
-        if re.match(r"^PL\b", ln, re.IGNORECASE):
-            m = re.search(r"(\d{1,3}(?:[.,]\d{2}))", ln)
+    # Remove multiple spaces
+    text = re.sub(r'\s+', ' ', text)
+
+    # --- Primary: full-line check (e.g. "PL T-shirt dziewczęcy 15.00 15.00")
+    for line in text.splitlines():
+        if line.strip().upper().startswith("PL "):
+            m = re.search(r'(\d{1,4}(?:[.,]\d{2}))', line)
             if m:
-                return m.group(1).replace(",", ".")
-    # fallback: search anywhere in text with 'PL' and price in same line
-    m = re.search(r"PL[^\n\r]{0,40}?(\d{1,3}(?:[.,]\d{2}))", text, re.IGNORECASE)
+                return m.group(1).replace(',', '.')
+
+    # --- Secondary: search “PL” followed by a price anywhere in text
+    m = re.search(r'PL[^0-9]{0,40}?(\d{1,4}(?:[.,]\d{2}))', text, re.IGNORECASE)
     if m:
-        return m.group(1).replace(",", ".")
+        return m.group(1).replace(',', '.')
+
+    # --- Tertiary: last-resort fallback (price near 'PLN' or 'PL ')
+    m = re.search(r'(?:PLN|PL)[^0-9]{0,10}?(\d{1,4}(?:[.,]\d{2}))', text, re.IGNORECASE)
+    if m:
+        return m.group(1).replace(',', '.')
+
     return None
+
 
   
 def format_number(value, currency):
@@ -862,6 +872,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
