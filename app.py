@@ -581,6 +581,20 @@ def pepco_section():
         concatenated_ids = "+".join(other_ids) if other_ids else ""
         process_pepco_pdf(primary, extra_order_ids=concatenated_ids)
 
+# ==================== Header Render ====================
+
+def render_header():
+    left, right = st.columns([3, 10], vertical_alignment="center")
+    with left:
+        if os.path.exists(LOGO_SVG):
+            st.image(LOGO_SVG, width=300)
+        elif os.path.exists(LOGO_PNG):
+            st.image(LOGO_PNG, width=300)
+        else:
+            st.markdown("<div style='font-size:40px'>🏷️</div>", unsafe_allow_html=True)
+
+
+
 # ==================== MAIN ====================
 def main():
     st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -592,6 +606,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
