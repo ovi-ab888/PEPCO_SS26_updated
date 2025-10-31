@@ -5,7 +5,7 @@ st.set_page_config(page_title="PEPCO Automation App", page_icon="🧾", layout="
 # ==================== Imports ====================
 import fitz  # PyMuPDF
 import pandas as pd
-import regex as re
+import re
 from io import StringIO
 import csv as pycsv
 from datetime import datetime, timedelta
@@ -542,3 +542,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
