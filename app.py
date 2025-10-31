@@ -229,25 +229,27 @@ def load_material_translations():
 # ---------- Helper: extract PL price ----------
 def _extract_pl_price(text: str):
     """
-    Detect PLN sales price from the PL row in the sales table.
-    Example lines:
-      PL T-shirt dziewczęcy 15.00 15.00
-      PL Sweter damski 35.00 35.00
+    Robust PLN price extractor for PEPCO OrderSupp PDFs.
+    Works even if table formatting splits cells or lines.
     """
-    # Normalize non-breaking spaces & extra spacing
+    import regex as re  # safer multiline regex engine
+    # Normalize
     text = text.replace('\xa0', ' ').replace('\u202f', ' ')
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    for ln in lines:
-        if re.match(r'^\s*PL\b', ln, re.IGNORECASE):
-            # capture last numeric pattern like 15.00 / 30,00 etc
-            m = re.search(r'(\d{1,4}(?:[.,]\d{2}))\s*$', ln)
-            if m:
-                return m.group(1).replace(',', '.')
-    # fallback search in whole text
-    m = re.search(r'PL[^\n\r]{0,50}?(\d{1,4}(?:[.,]\d{2}))', text, re.IGNORECASE)
-    if m:
-        return m.group(1).replace(',', '.')
+    text = re.sub(r'\s+', ' ', text)
+    # Try to find the "Country Item name Sales price" table section
+    m_table = re.search(r'Country\s+Item\s+name\s+Sales\s+price(.*?)PRODUCT\s+CHARACTERISTIC', text, re.I | re.S)
+    if not m_table:
+        # fallback: take big chunk around PL
+        m_table = re.search(r'PL[^\n\r]{0,300}', text, re.I | re.S)
+    if not m_table:
+        return None
+    table_text = m_table.group(1)
+    # Now search for the PL line and capture number
+    m_price = re.search(r'\bPL\b[^0-9]{0,40}?(\d{1,4}(?:[.,]\d{2}))', table_text, re.I)
+    if m_price:
+        return m_price.group(1).replace(',', '.')
     return None
+
 
 
 
@@ -866,6 +868,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
