@@ -13,6 +13,9 @@ import os
 import requests
 
 # ==================== THEME (compact) ====================
+LOGO_PNG = "logo.png"
+LOGO_SVG = "logo.svg"
+
 THEME_CSS = """
 <style>
 .block-container{max-width:1120px;padding-top:1rem;padding-bottom:3rem}
@@ -542,4 +545,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
