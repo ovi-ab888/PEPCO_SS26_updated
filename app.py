@@ -11,6 +11,7 @@ import csv as pycsv
 from datetime import datetime, timedelta
 import os
 import requests
+import traceback
 
 # ==================== THEME (compact) ====================
 THEME_CSS = """
@@ -22,60 +23,40 @@ label{font-weight:600}
 </style>
 """
 
-# ==================== Password gate (optional) ====================
+# ==================== PASSWORD GATE ====================
 def check_password():
-    """Set st.secrets['app_password'] or env PEPCO_APP_PASSWORD to enable; else skip."""
-    expected = None
-    try:
-        expected = st.secrets.get("app_password", None)
-    except Exception:
-        expected = None
-    if expected is None:
-        expected = os.environ.get("PEPCO_APP_PASSWORD")
-
-    # If no password configured, allow straight-through.
-    if expected is None:
+    """Optional password protection"""
+    expected = os.environ.get("PEPCO_APP_PASSWORD") or st.secrets.get("app_password", None)
+    if not expected:
         return True
-
-    def _password_entered():
-        st.session_state["password_ok"] = (st.session_state.get("password") == expected)
-        try: del st.session_state["password"]
-        except Exception: pass
 
     if st.session_state.get("password_ok"):
         return True
 
+    def _password_entered():
+        st.session_state["password_ok"] = (st.session_state.get("password") == expected)
+        st.session_state.pop("password", None)
+
     st.text_input("Password", type="password", key="password", on_change=_password_entered)
     if st.session_state.get("password_ok") is False:
         st.error("Wrong password.")
-    return False
+    return st.session_state.get("password_ok", False)
 
-# ==================== Constants / Mappings ====================
+# ==================== CONSTANTS ====================
 WASHING_CODES = {
     '1':'১২৩৪৫','2':'১৪৭৮৫','3':'djnst','4':'djnpt','5':'djnqt',
     '6':'djnqt','7':'gjnpt','8':'gjnpu','9':'gjnqt','10':'gjnqu',
     '11':'ijnst','12':'ijnsu','13':'ijnpu','14':'ijnsv','15':'djnsw'
 }
 
-COLLECTION_MAPPING = {
-    'b': {'CROCO CLUB':'MODERN 1','LITTLE SAILOR':'MODERN 2','EXPLORE THE WORLD':'MODERN 3',
-          'JURASIC ADVENTURE':'MODERN 4','WESTERN SPIRIT':'CLASSIC 1','SUMMER FUN':'CLASSIC 2'},
-    'a': {'Rainbow Girl':'MODERN 1','NEONS PICNIC':'MODERN 2','COUNTRY SIDE':'ROMANTIC 2','ESTER GARDENG':'ROMANTIC 3'},
-    'd': {'LITTLE TREASURE':'MODERN 1','DINO FRIENDS':'CLASSIC 1','EXOTIC ANIMALS':'CLASSIC 2'},
-    'd_girls': {'SWEEET PASTELS':'MODERN 1','PORCELAIN':'ROMANTIC 2','SUMMER VIBE':'ROMANTIC 3'},
-    'yg': {'CUTE_JUMP':'COLLECTION_1','SWEET_HEART':'COLLECTION_2','DAISY':'COLLECTION_3',
-           'SPECIAL OCC':'COLLECTION_4','LILALOV':'COLLECTION_5','COOL GIRL':'COLLECTION_6','DEL MAR':'COLLECTION_7'}
-}
-
-# ==================== Data Loaders ====================
+# ==================== DATA LOADERS ====================
 @st.cache_data(ttl=600)
 def load_price_data():
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRdAQmBHwDEWCgmLdEdJc0HsFYpPSyERPHLwmr2tnTYU1BDWdBD6I0ZYfEDzataX0wTNhfLfnm-Te6w/pub?gid=583402611&single=true&output=csv"
         df = pd.read_csv(url)
         if df.empty: return None
-        price = {c: df[c].dropna().tolist() for c in df.columns}
-        return price
+        return {c: df[c].dropna().tolist() for c in df.columns}
     except Exception:
         return None
 
@@ -85,8 +66,7 @@ def load_product_translations():
         sheet_id = "1ue68TSJQQedKa7sVBB4syOc0OXJNaLS7p9vSnV52mKA"
         sheet_name = "SS26 Product_Name"
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={requests.utils.quote(sheet_name)}"
-        df = pd.read_csv(url)
-        return df if not df.empty else pd.DataFrame()
+        return pd.read_csv(url)
     except Exception:
         return pd.DataFrame()
 
@@ -101,22 +81,20 @@ def load_material_translations():
             name = r.get('Name', r.iloc[0])
             if pd.isna(name): continue
             for lang in ['AL','MK']:
-                rows.append({'material':name,'language':lang,'translation':r.get(lang,"") if pd.notna(r.get(lang,"")) else ""})
-        return pd.DataFrame(rows) if rows else pd.DataFrame([{'material':'Cotton','language':'AL','translation':'Cotton'},{'material':'Cotton','language':'MK','translation':'Cotton'}])
+                rows.append({'material': name, 'language': lang, 'translation': r.get(lang,"") or ""})
+        return pd.DataFrame(rows)
     except Exception:
         return pd.DataFrame([{'material':'Cotton','language':'AL','translation':'Cotton'},
                              {'material':'Cotton','language':'MK','translation':'Cotton'}])
 
-# ==================== Helpers ====================
+# ==================== HELPERS ====================
 def format_number(value, currency):
     try:
-        if isinstance(value, str): value = float(value.replace(',', '.'))
+        value = float(str(value).replace(',', '.'))
+        s = f"{value:,.2f}".replace(".", ",")
         if currency in ['EUR','BGN','BAM','RON','PLN']:
-            s = f"{float(value):,.2f}".replace(".", ",")
-            if ',' in s:
-                a = s.split(','); a[0] = a[0].replace('.',''); s = ','.join(a)
-            return s
-        return str(int(float(value)))
+            a = s.split(','); a[0] = a[0].replace('.',''); s = ','.join(a)
+        return s
     except Exception:
         return str(value)
 
@@ -156,8 +134,7 @@ def map_item_class_to_dept_label(item_class):
     return None
 
 def get_dept_value(item_class):
-    if not item_class: return ""
-    ic = item_class.lower()
+    ic = item_class.lower() if item_class else ""
     if 'baby ' in ic: return "BABY"
     if 'younger' in ic: return "KIDS"
     if 'older' in ic: return "TEENS"
@@ -168,135 +145,67 @@ def get_dept_value(item_class):
 def modify_collection(collection, item_class):
     if not item_class: return collection
     ic = item_class.lower()
-    if any(x in ic for x in ['boys']): return f"{collection} B"
-    if any(x in ic for x in ['girls']): return f"{collection} G"
+    if 'boys' in ic: return f"{collection} B"
+    if 'girls' in ic: return f"{collection} G"
     return collection
 
+# ==================== COLOUR DETECTION ====================
 def extract_colour_from_page2(text, page_number=1):
     try:
-        # Split and clean all lines
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-
-        # Skip words that are never colour names
-        skip_keywords = [
-            "PURCHASE", "COLOUR", "TOTAL", "PANTONE", "SUPPLIER", "PRICE",
-            "ORDERED", "SIZES", "TPG", "TPX", "USD", "NIP", "PEPCO",
-            "Poland", "Poznań"
-        ]
-
-        # Skip common size names (expanded)
-        skip_sizes = [
-            "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL",
-            "XXXL", "1XL", "2XL", "2X", "3X", "4X"
-        ]
-
+        skip_keywords = ["PURCHASE","COLOUR","TOTAL","PANTONE","SUPPLIER","PRICE",
+                         "ORDERED","SIZES","TPG","TPX","USD","NIP","PEPCO","Poland","Poznań"]
+        skip_sizes = ["XS","S","M","L","XL","XXL","3XL","4XL","5XL","XXXL","1XL","2XL","2X","3X","4X"]
         filtered = []
+
         for ln in lines:
-            line_clean = ln.strip().upper()
-
-            # Skip lines with unwanted keywords
-            if any(k.lower() in ln.lower() for k in skip_keywords):
-                continue
-
-            # Skip if only digits (1, 2, 3, etc.)
-            if re.match(r"^\s*\d+\s*$", line_clean):
-                continue
-
-            # Skip purely numeric or symbol-based lines
-            if re.match(r"^[\d\s,./-]+$", line_clean):
-                continue
-
-            # Skip known size indicators (XS, XL, 3XL, etc.)
-            if line_clean in skip_sizes:
-                continue
-
-            # Skip patterns like "3 XL", "2XL", "4X"
-            if re.match(r"^\d*\s*[XSML]{1,3}X?L?$", line_clean):
-                continue
-
+            t = ln.strip().upper()
+            if any(k.lower() in t.lower() for k in skip_keywords): continue
+            if re.match(r"^\s*\d+\s*$", t): continue
+            if re.match(r"^[\d\s,./-]+$", t): continue
+            if t in skip_sizes or re.match(r"^\d*\s*[XSML]{1,3}X?L?$", t): continue
             filtered.append(ln)
 
         if filtered:
-            colour = re.sub(r'[\d\.\)\(]+', '', filtered[0]).strip().upper()
+            colour = re.sub(r'[\d\.\)\(]+','', filtered[0]).strip().upper()
             if "MANUAL" in colour:
-                manual = st.text_input(f"Enter Colour (Page {page_number})", key=f"colour_manual_{page_number}")
-                return (manual or "UNKNOWN").upper()
+                return st.text_input(f"Enter Colour (Page {page_number})", key=f"colour_manual_{page_number}").upper()
             return colour or "UNKNOWN"
 
-        # If no colour found, show input box
-        st.warning(f"⚠️ Page {page_number}: Colour information not found in PDF")
-        manual = st.text_input(f"Enter Colour (Page {page_number}):", key=f"colour_missing_{page_number}")
-        return (manual or "UNKNOWN").upper()
+        st.warning(f"⚠️ Page {page_number}: Colour info not found.")
+        return st.text_input(f"Enter Colour (Page {page_number}):", key=f"colour_missing_{page_number}").upper() or "UNKNOWN"
 
     except Exception as e:
         st.error(f"Colour extraction error: {e}")
         return "UNKNOWN"
 
-
-# ==================== PRICE DETECTION (Robust) ====================
+# ==================== PRICE DETECTION ====================
 def _extract_pl_price(text: str):
-    """
-    Robust PLN price extractor for PEPCO OrderSupp PDFs.
-    Works even if the table has line breaks or weird spacing.
-    Safe from 'no such group' errors.
-    """
     try:
-        text = text.replace('\xa0', ' ').replace('\u202f', ' ')
-        text = re.sub(r'\s+', ' ', text)
-
-        # First, try to match full table section
-        m_table = re.search(
-            r'Country\s+Item\s+name\s+Sales\s+price(.*?)PRODUCT\s+CHARACTERISTIC',
-            text, re.I | re.S
-        )
-
-        # If no table found, try fallback single-line PL match
+        text = text.replace('\xa0',' ').replace('\u202f',' ')
+        text = re.sub(r'\s+',' ',text)
+        m_table = re.search(r'Country\s+Item\s+name\s+Sales\s+price(.*?)PRODUCT\s+CHARACTERISTIC', text, re.I | re.S)
         if not m_table:
             m_table = re.search(r'\bPL[^\n\r]{0,300}', text, re.I | re.S)
-            if m_table:
-                block = m_table.group(0)  # group(0) is full match
-            else:
-                return None
+            block = m_table.group(0) if m_table else ""
         else:
-            # safe extraction of group(1)
-            block = m_table.group(1) if m_table.lastindex and m_table.lastindex >= 1 else m_table.group(0)
-
-        # Extract numeric PLN price
+            block = m_table.group(1) if m_table.lastindex else m_table.group(0)
         m_price = re.search(r'\bPL\b[^0-9]{0,40}?(\d{1,4}(?:[.,]\d{2}))', block, re.I)
-        if m_price:
-            return m_price.group(1).replace(',', '.').strip()
-
-        return None
-
+        return m_price.group(1).replace(',', '.') if m_price else None
     except Exception as e:
         st.error(f"Price extraction error: {e}")
         return None
 
-
-# ==================== Core PDF Extractor ====================
+# ==================== PDF EXTRACTOR ====================
 def extract_data_from_pdf(file):
-    """
-    100% crash-proof version — handles all regex safely.
-    """
     try:
-        import fitz, re
-        from datetime import datetime, timedelta
-        import traceback
-
-        def safe_get(match, group=1, default="UNKNOWN"):
-            try:
-                if match:
-                    return match.group(group).strip()
-                return default
-            except Exception:
-                return default
-
         doc = fitz.open(stream=file.read(), filetype="pdf")
-        if len(doc) < 2:
+        if len(doc) < 2: 
             st.error("PDF must have at least 2 pages.")
             return None
 
         page1 = doc[0].get_text()
+        safe = lambda m,g=1,d="UNKNOWN": m.group(g).strip() if m else d
 
         order_id = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*([A-Z0-9_+-]+)", page1)
         season = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", page1)
@@ -305,327 +214,93 @@ def extract_data_from_pdf(file):
         supplier_code = re.search(r"Supplier product code\s*\.{2,}\s*(.+)", page1)
         supplier_name = re.search(r"Supplier name\s*\.{2,}\s*(.+)", page1)
         collection = re.search(r"Collection\s*\.{2,}\s*(.+)", page1)
+        season_value = f"{safe(season,1,'')}{safe(season,2,'')}".strip() or "UNKNOWN"
 
-        # --- Season ---
-        try:
-            part1 = season.group(1) if season and season.lastindex >= 1 else ""
-            part2 = season.group(2) if season and season.lastindex >= 2 else ""
-            season_value = (part1 + part2).strip() or "UNKNOWN"
-        except Exception:
-            season_value = "UNKNOWN"
-
-        # --- Date ---
         date_m = re.search(r"Handover\s*date\s*\.{2,}\s*(\d{2}/\d{2}/\d{4})", page1)
         batch = "UNKNOWN"
         if date_m:
             try:
                 batch = (datetime.strptime(date_m.group(1), "%d/%m/%Y") - timedelta(days=20)).strftime("%m%Y")
-            except Exception:
-                pass
+            except: pass
 
-        # --- Page 2 colour ---
         page2_text = doc[1].get_text()
         colour = extract_colour_from_page2(page2_text, page_number=2)
-
-        # --- Pages 3–4 for price ---
-        page3 = doc[2].get_text() if len(doc) > 2 else ""
-        page4 = doc[3].get_text() if len(doc) > 3 else ""
+        page3 = doc[2].get_text() if len(doc)>2 else ""
+        page4 = doc[3].get_text() if len(doc)>3 else ""
         auto_pln_price = _extract_pl_price(page3) or _extract_pl_price(page4)
 
-        # --- SKU & barcode ---
-        combined_text = page3 + page4
-        skus = re.findall(r"\b\d{8}\b", combined_text)
-        barcodes = re.findall(r"\b\d{13}\b", combined_text)
+        combined = page3 + page4
+        skus = re.findall(r"\b\d{8}\b", combined)
+        barcodes = re.findall(r"\b\d{13}\b", combined)
 
-        result = [{
-            "Order_ID": safe_get(order_id),
-            "Style": safe_get(style, 0),
+        return {"data": [{
+            "Order_ID": safe(order_id),
+            "Style": safe(style,0),
             "Colour": colour,
-            "Supplier_product_code": safe_get(supplier_code),
-            "Item_classification": safe_get(item_class),
-            "Supplier_name": safe_get(supplier_name),
+            "Supplier_product_code": safe(supplier_code),
+            "Item_classification": safe(item_class),
+            "Supplier_name": safe(supplier_name),
             "today_date": datetime.today().strftime('%d-%m-%Y'),
-            "Collection": safe_get(collection),
+            "Collection": safe(collection),
             "Batch": batch,
             "Season": season_value,
             "SKU": skus[0] if skus else "",
             "barcode": barcodes[0] if barcodes else ""
-        }]
-
-        return {"data": result, "pln_price": auto_pln_price}
+        }],
+        "pln_price": auto_pln_price}
 
     except Exception as e:
-        import traceback
         st.error(f"PDF error: {e}")
         st.text(traceback.format_exc())
         return None
 
-
-# ==================== Product name formatter ====================
-def format_product_translations(product_name, translation_row,
-                                selected_materials=None, material_translations=None,
-                                material_compositions=None):
-    formatted = []
-    country_suffixes = {'BiH':" Sastav materijala na ušivenoj etiketi.", 'RS':" Sastav materijala nalazi se na ušivenoj etiketi."}
-    en_text = str(translation_row.get('EN')) if pd.notna(translation_row.get('EN')) else product_name
-    formatted.append(f"|EN| {en_text}")
-
-    combined = {'ES': f"{translation_row.get('ES')} / {translation_row.get('ES_CA')}" if pd.notna(translation_row.get('ES_CA')) else translation_row.get('ES')}
-    order = ['AL','BG','BiH','CZ','DE','EE','ES','GR','HR','HU','IT','LT','LV','MK','PL','PT','RO','RS','SI','SK']
-
-    for lang in order:
-        if lang in combined and combined[lang] is not None:
-            text = combined[lang]
-        elif pd.notna(translation_row.get(lang)):
-            text = translation_row.get(lang)
-        else:
-            text = product_name
-
-        if selected_materials and material_translations and lang in ['AL','MK']:
-            comp = (material_compositions or {}).get(lang, "")
-            names = material_translations.get(lang, "")
-            if comp: text = f"{text}: {comp}"
-            elif names: text = f"{text}: {names}"
-
-        if lang in country_suffixes:
-            if not text.endswith('.'): text += "."
-            text += country_suffixes[lang]
-
-        formatted.append(f"|{lang}| {text}")
-
-    return " ".join(s for s in formatted if s)
-
-# ==================== Main workflow (FULL) ====================
-def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
-    translations_df = load_product_translations()
-    material_translations_df = load_material_translations()
-    if not (uploaded_pdf and not translations_df.empty):
-        return
-
-    data_obj = extract_data_from_pdf(uploaded_pdf)
-    if not data_obj: return
-
-    result_data = data_obj["data"]
-    auto_pln = data_obj.get("pln_price")  # <-- AUTO PLN from PL row
-
-    df = pd.DataFrame(result_data)
-    first_row = result_data[0] if result_data else {}
-    pdf_item_class = first_row.get("Item_classification", "")
-    pdf_item_name_en = (first_row.get("Item_name_EN") or "").strip()
-
-    if extra_order_ids:
-        try: df['Order_ID'] = df['Order_ID'].astype(str) + "+" + extra_order_ids
-        except Exception: pass
-
-    c1,c2,c3,c4 = st.columns(4)
-    depts = translations_df['DEPARTMENT'].dropna().unique().tolist()
-
-    default_dept_label = map_item_class_to_dept_label(pdf_item_class)
-    default_dept_index = next((i for i,d in enumerate(depts) if str(d).strip().lower()==str(default_dept_label or "").strip().lower()), 0)
-
-    with c1:
-        selected_dept = st.selectbox("Select Department", depts, index=default_dept_index, key="ui_dept")
-
-    filtered = translations_df[translations_df['DEPARTMENT']==selected_dept]
-    products = filtered['PRODUCT_NAME'].dropna().unique().tolist()
-    default_product_index = next((i for i,p in enumerate(products) if str(p).strip().lower()==pdf_item_name_en.lower()), 0)
-
-    with c2:
-        product_type = st.selectbox("Select Product Type", products, index=default_product_index, key="ui_product")
-
-    washing_options = list(WASHING_CODES.keys())
-    with c3:
-        washing_code_key = st.selectbox("Select Washing Code", washing_options, index=washing_options.index('9') if '9' in washing_options else 0, key="ui_wash")
-
-    # ✅ Auto-fill PLN price
-    with c4:
-        pln_price_raw = st.text_input("Enter PLN Price", value=(auto_pln or ""), key="ui_pln_price")
-
-    # ----- Parse PLN Price & Currency ladder -----
-    pln_price = None
-    if pln_price_raw.strip():
-        try:
-            pln_price = float(pln_price_raw.replace(",", "."))
-            if pln_price < 0: st.error("❌ Price can't be negative."); pln_price=None
-        except ValueError:
-            st.error("❌ Please enter a valid number like 12.50 or 12,50")
-
-    # ----- Materials UI -----
-    st.markdown("### Material Composition (%)")
-    if "mat_rows" not in st.session_state: st.session_state.mat_rows = 1
-    if "mat_data" not in st.session_state: st.session_state.mat_data = [{"mat":"Cotton","pct":100}]
-
-    materials_list = material_translations_df['material'].dropna().unique().tolist() if not material_translations_df.empty else ["Cotton"]
-    if "Cotton" not in materials_list: materials_list = ["Cotton"] + materials_list
-
-    def _ensure_row(i):
-        while i >= len(st.session_state.mat_data):
-            st.session_state.mat_data.append({"mat":None,"pct":0})
-
-    for i in range(st.session_state.mat_rows):
-        _ensure_row(i)
-        prev_total = sum(r["pct"] for r in st.session_state.mat_data[:i] if r["pct"])
-        remain = max(0, 100 - prev_total)
-        a,b = st.columns([3,1.3])
-        with a:
-            cur = st.session_state.mat_data[i]["mat"]
-            opts = ["—"] + materials_list
-            idx = opts.index(cur) if cur in opts else 0
-            st.session_state.mat_data[i]["mat"] = st.selectbox("Select Material(s)" if i==0 else f"Select Material(s) #{i+1}", opts, index=idx, key=f"mat_sel_{i}")
-        with b:
-            cur_pct = st.session_state.mat_data[i]["pct"]
-            default_pct = 100 if (i==0 and (cur_pct in (None,0)) and st.session_state.mat_data[i]["mat"]=="Cotton") else min(cur_pct or 0, remain)
-            if i==0 and st.session_state.mat_data[i]["mat"]=="Cotton" and (cur_pct in (None,0)):
-                default_pct = 100; st.session_state.mat_data[i]["pct"]=100
-            st.session_state.mat_data[i]["pct"] = st.number_input("Composition (%)" if i==0 else f"Composition (%) #{i+1}", min_value=0, max_value=remain, step=1, value=default_pct, key=f"mat_pct_{i}")
-
-    valid = [r for r in st.session_state.mat_data[:st.session_state.mat_rows] if r["mat"] not in (None,"—") and r["pct"]>0]
-    total_pct = sum(r["pct"] for r in valid)
-    st.write(f"**Total: {total_pct}%**")
-    if total_pct < 100 and st.session_state.mat_rows < 5:
-        last = st.session_state.mat_data[st.session_state.mat_rows-1]
-        if last["mat"] not in (None,"—") and last["pct"]>0:
-            st.session_state.mat_rows += 1
-            st.rerun()
-    if total_pct >= 100 and st.session_state.mat_rows > len(valid):
-        st.session_state.mat_rows = len(valid)
-
-    selected_materials = [r["mat"] for r in valid]
-    cotton_value = "Y" if len(valid)==1 and (valid[0]["mat"] or "").lower()=="cotton" and int(valid[0]["pct"])==100 else ""
-
-    # ----- Material translations -----
-    material_trans_dict, material_compositions = {}, {}
-    if selected_materials and not material_translations_df.empty:
-        for lang in ['AL','MK']:
-            names, comp = [], []
-            for r in valid:
-                t = material_translations_df[(material_translations_df['material']==r['mat']) & (material_translations_df['language']==lang)]
-                if not t.empty:
-                    tr = t['translation'].iloc[0]
-                    names.append(tr); comp.append(f"{r['pct']}% {tr}")
-            if names: material_trans_dict[lang] = ", ".join(names)
-            if comp:  material_compositions[lang] = ", ".join(comp)
-
-    # ----- Build final DF columns -----
-    df['Dept'] = df['Item_classification'].apply(get_dept_value)
-    if cotton_value=="Y": df['Cotton'] = "Y"
-    else:
-        if 'Cotton' in df.columns: df = df.drop(columns=['Cotton'])
-
-    df['Collection'] = df.apply(lambda r: modify_collection(r['Collection'], r['Item_classification']), axis=1)
-
-    product_row = filtered[filtered['PRODUCT_NAME']==product_type]
-    if not product_row.empty:
-        df['product_name'] = format_product_translations(product_type, product_row.iloc[0], selected_materials, material_trans_dict, material_compositions)
-    else:
-        df['product_name'] = ""
-
-    df['washing_code'] = WASHING_CODES[washing_code_key]
-
-    # ----- Price ladder + CSV Export -----
-    if pln_price is not None:
-        currency_values = find_closest_price(pln_price)
-        if currency_values:
-            for cur in ['EUR','BGN','BAM','RON','CZK','MKD','RSD','HUF']:
-                df[cur] = currency_values.get(cur, "")
-            df['PLN'] = format_number(pln_price, 'PLN')
-
-            final_cols = [
-                "Order_ID","Style","Colour","Supplier_product_code","Item_classification",
-                "Supplier_name","today_date","Collection","Colour_SKU","Style_Merch_Season",
-                "Batch","barcode","washing_code","EUR","BGN","BAM","PLN","RON","CZK","MKD",
-                "RSD","HUF","product_name","Dept","Season"
-            ]
-            if 'Cotton' in df.columns: final_cols.append("Cotton")
-            for c in final_cols:
-                if c not in df.columns: df[c] = ""
-
-            st.success("✅ Data ready. Edit if needed, then download CSV.")
-            edited_df = st.data_editor(df[final_cols], use_container_width=True)
-
-            csv_buf = StringIO()
-            w = pycsv.writer(csv_buf, delimiter=';', quoting=pycsv.QUOTE_ALL)
-            w.writerow(final_cols)
-            for row in edited_df.itertuples(index=False):
-                w.writerow(row)
-
-            first = df.iloc[0]
-            season_val = (first.get("Season","UNKNOWN") or "UNKNOWN").upper()
-            sku_val = "_".join(df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*","",str(x))).tolist()) or "UNKNOWN"
-            supplier_code = first.get("Supplier_product_code","UNKNOWN")
-            style_val = first.get("Style","UNKNOWN")
-            file_name = f"PEPCO_{season_val}_{sku_val}_DATAFILE_{supplier_code}_00_{style_val}.csv"
-
-            st.download_button("📥 Download CSV", csv_buf.getvalue().encode('utf-8-sig'), file_name=file_name, mime="text/csv")
-        else:
-            st.warning("⚠️ Valid PLN price not found in the price sheet. Please adjust.")
-    else:
-        st.info("ℹ️ Enter a PLN price to compute currency ladder & export.")
-
-# ==================== Section (Uploader + Reset) ====================
+# ==================== UI LOGIC ====================
 def pepco_section():
     st.subheader("PEPCO Data Processing")
 
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
 
-    col = st.columns([1,6])[0]
-    with col:
-        def _reset():
-            for k in list(st.session_state.keys()):
-                if k.startswith(("ui_","mat_","pepco_","colour_")):
-                    st.session_state.pop(k, None)
-            st.session_state.uploader_key += 1
-            st.rerun()
-        st.button("🔄 New upload", on_click=_reset)
+    def reset():
+        for k in list(st.session_state.keys()):
+            if k.startswith(("ui_","mat_","pepco_","colour_")):
+                st.session_state.pop(k, None)
+        st.session_state.uploader_key += 1
+        st.rerun()
 
-    uploaded = st.file_uploader("Upload PEPCO Data file", type=["pdf"], key=f"pepco_uploader_{st.session_state.uploader_key}", accept_multiple_files=True)
+    st.button("🔄 New upload", on_click=reset)
+
+    uploaded = st.file_uploader("Upload PEPCO Data file", type=["pdf"], 
+                                key=f"pepco_uploader_{st.session_state.uploader_key}", 
+                                accept_multiple_files=True)
     if uploaded:
-        files = uploaded if isinstance(uploaded, list) else [uploaded]
-        primary = files[0]
-        others = files[1:]
+        for pdf in uploaded:
+            with st.expander(f"📄 {pdf.name}", expanded=True):
+                data_obj = extract_data_from_pdf(pdf)
+                if not data_obj: continue
 
-        # collect extra order-ids from other PDFs
-        other_ids = []
-        for f in others:
-            try:
-                f.seek(0)
-                with fitz.open(stream=f.read(), filetype="pdf") as d:
-                    if len(d)>0:
-                        t = d[0].get_text()
-                        m = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*([A-Z0-9_+-]+)", t)
-                        if m: other_ids.append(m.group(1).strip())
-            except Exception:
-                pass
-        concatenated_ids = "+".join(other_ids) if other_ids else ""
-        process_pepco_pdf(primary, extra_order_ids=concatenated_ids)
+                df = pd.DataFrame(data_obj["data"])
+                st.dataframe(df, use_container_width=True)
+                pln = data_obj.get("pln_price")
+                val = st.text_input("Enter PLN Price (auto)", value=pln or "", key=f"pln_{pdf.name}")
+                if val:
+                    st.success(f"✅ Detected PLN: {val}")
+                else:
+                    st.warning("⚠️ PLN not detected")
 
 # ==================== MAIN ====================
 def main():
     st.markdown(THEME_CSS, unsafe_allow_html=True)
-
-    # ✅ Safe logo load for Streamlit Cloud (using GitHub raw URL)
     try:
-        logo_url = "https://raw.githubusercontent.com/ovi-ab888/PEPCO_SS26_updated/main/logo.svg"
-        st.image(logo_url, width=280)
-    except Exception as e:
+        st.image("https://raw.githubusercontent.com/ovi-ab888/PEPCO_SS26_updated/main/logo.svg", width=260)
+    except:
         st.write("🧾 PEPCO Automation App")
 
     st.title("🧾 PEPCO Automation App")
-    if not check_password():
-        st.stop()
+    if not check_password(): st.stop()
     pepco_section()
     st.markdown("---")
     st.caption("Built with ❤️ by Ovi")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
