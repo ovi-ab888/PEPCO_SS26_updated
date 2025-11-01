@@ -237,25 +237,41 @@ def extract_colour_from_page2(text, page_number=1):
 def _extract_pl_price(text: str):
     """
     Robust PLN price extractor for PEPCO OrderSupp PDFs.
-    Works even if table cells break lines or spacing is weird.
+    Works even if the table has line breaks or weird spacing.
+    Safe from 'no such group' errors.
     """
-    text = text.replace('\xa0', ' ').replace('\u202f', ' ')
-    text = re.sub(r'\s+', ' ', text)
+    try:
+        text = text.replace('\xa0', ' ').replace('\u202f', ' ')
+        text = re.sub(r'\s+', ' ', text)
 
-    # 1) Try to isolate the table block
-    m_table = re.search(r'Country\s+Item\s+name\s+Sales\s+price(.*?)PRODUCT\s+CHARACTERISTIC', text, re.I | re.S)
-    if not m_table:
-        # Fallback: small window around 'PL'
-        m_table = re.search(r'PL[^\n\r]{0,300}', text, re.I | re.S)
-    if not m_table:
+        # First, try to match full table section
+        m_table = re.search(
+            r'Country\s+Item\s+name\s+Sales\s+price(.*?)PRODUCT\s+CHARACTERISTIC',
+            text, re.I | re.S
+        )
+
+        # If no table found, try fallback single-line PL match
+        if not m_table:
+            m_table = re.search(r'\bPL[^\n\r]{0,300}', text, re.I | re.S)
+            if m_table:
+                block = m_table.group(0)  # group(0) is full match
+            else:
+                return None
+        else:
+            # safe extraction of group(1)
+            block = m_table.group(1) if m_table.lastindex and m_table.lastindex >= 1 else m_table.group(0)
+
+        # Extract numeric PLN price
+        m_price = re.search(r'\bPL\b[^0-9]{0,40}?(\d{1,4}(?:[.,]\d{2}))', block, re.I)
+        if m_price:
+            return m_price.group(1).replace(',', '.').strip()
+
         return None
 
-    block = m_table.group(1)
-    # 2) Find the first price number after 'PL'
-    m_price = re.search(r'\bPL\b[^0-9]{0,40}?(\d{1,4}(?:[.,]\d{2}))', block, re.I)
-    if m_price:
-        return m_price.group(1).replace(',', '.')
-    return None
+    except Exception as e:
+        st.error(f"Price extraction error: {e}")
+        return None
+
 
 # ==================== Core PDF Extractor ====================
 def extract_data_from_pdf(file):
@@ -604,6 +620,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
