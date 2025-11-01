@@ -263,30 +263,73 @@ def pepco_section():
 
     def reset():
         for k in list(st.session_state.keys()):
-            if k.startswith(("ui_","mat_","pepco_","colour_")):
+            if k.startswith(("ui_", "mat_", "pepco_", "colour_")):
                 st.session_state.pop(k, None)
         st.session_state.uploader_key += 1
         st.rerun()
 
     st.button("🔄 New upload", on_click=reset)
 
-    uploaded = st.file_uploader("Upload PEPCO Data file", type=["pdf"], 
-                                key=f"pepco_uploader_{st.session_state.uploader_key}", 
-                                accept_multiple_files=True)
+    uploaded = st.file_uploader(
+        "Upload PEPCO Data file(s)",
+        type=["pdf"],
+        key=f"pepco_uploader_{st.session_state.uploader_key}",
+        accept_multiple_files=True
+    )
+
+    # ------------------ Combined PDF Processing ------------------
     if uploaded:
-        for pdf in uploaded:
-            with st.expander(f"📄 {pdf.name}", expanded=True):
+        combined_rows = []
+        all_errors = []
+
+        progress = st.progress(0)
+        for idx, pdf in enumerate(uploaded, start=1):
+            try:
                 data_obj = extract_data_from_pdf(pdf)
-                if not data_obj: continue
+                if not data_obj:
+                    continue
 
                 df = pd.DataFrame(data_obj["data"])
-                st.dataframe(df, use_container_width=True)
-                pln = data_obj.get("pln_price")
-                val = st.text_input("Enter PLN Price (auto)", value=pln or "", key=f"pln_{pdf.name}")
-                if val:
-                    st.success(f"✅ Detected PLN: {val}")
-                else:
-                    st.warning("⚠️ PLN not detected")
+                auto_pln = data_obj.get("pln_price") or ""
+
+                # Add detected PLN to dataframe
+                df["Detected_PLN"] = auto_pln
+
+                combined_rows.append(df)
+
+            except Exception as e:
+                all_errors.append(f"{pdf.name}: {e}")
+
+            progress.progress(idx / len(uploaded))
+
+        progress.empty()
+
+        # ------------------ Combined Output ------------------
+        if combined_rows:
+            full_df = pd.concat(combined_rows, ignore_index=True)
+
+            st.success(f"✅ Successfully processed {len(combined_rows)} PDF file(s).")
+            st.dataframe(full_df, use_container_width=True)
+
+            # CSV Export
+            csv_buf = StringIO()
+            full_df.to_csv(csv_buf, index=False)
+            csv_data = csv_buf.getvalue().encode('utf-8-sig')
+
+            today = datetime.today().strftime("%Y%m%d")
+            st.download_button(
+                label="📥 Download Combined CSV",
+                data=csv_data,
+                file_name=f"PEPCO_Combined_{today}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.error("❌ No valid PDF data found.")
+
+        if all_errors:
+            st.warning("⚠️ Some files had issues:")
+            for err in all_errors:
+                st.text(f"• {err}")
 
 # ==================== MAIN ====================
 def main():
@@ -304,3 +347,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
