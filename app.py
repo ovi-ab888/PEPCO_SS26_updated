@@ -261,23 +261,40 @@ def _extract_pl_price(text: str):
 def extract_data_from_pdf(file):
     """
     Extracts all required data + auto PLN price from page 3/4 table (PL row).
+    Handles Season safely and prevents 'no such group' errors.
     """
     try:
+        import fitz, re
+        from datetime import datetime, timedelta
+
         doc = fitz.open(stream=file.read(), filetype="pdf")
         if len(doc) < 3:
             st.error("PDF must have at least 3 pages.")
             return None
 
+        # --- PAGE 1 basic info ---
         page1 = doc[0].get_text()
+
         order_id = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*([A-Z0-9_+-]+)", page1)
-        season   = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", page1)
-        style    = re.search(r"\b\d{6}\b", page1)
+        season = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", page1)
+        style = re.search(r"\b\d{6}\b", page1)
         item_class = re.search(r"Item classification\s*\.{2,}\s*(.+)", page1)
         supplier_code = re.search(r"Supplier product code\s*\.{2,}\s*(.+)", page1)
         supplier_name = re.search(r"Supplier name\s*\.{2,}\s*(.+)", page1)
         collection = re.search(r"Collection\s*\.{2,}\s*(.+)", page1)
 
-        # derive batch from Handover date (same logic as before)
+        # --- Season safe fix (prevents "no such group") ---
+        try:
+            if season:
+                part1 = season.group(1) if season.lastindex and season.lastindex >= 1 else ""
+                part2 = season.group(2) if season.lastindex and season.lastindex >= 2 else ""
+                season_value = f"{(part1 or '')}{(part2 or '')}".strip() or "UNKNOWN"
+            else:
+                season_value = "UNKNOWN"
+        except Exception:
+            season_value = "UNKNOWN"
+
+        # --- Date → Batch (optional) ---
         date_m = re.search(r"Handover\s*date\s*\.{2,}\s*(\d{2}/\d{2}/\d{4})", page1)
         batch = "UNKNOWN"
         if date_m:
@@ -287,33 +304,25 @@ def extract_data_from_pdf(file):
                 pass
 
         item_class_value = item_class.group(1).strip() if item_class else "UNKNOWN"
-        class_type = get_classification_type(item_class_value)
-        collection_value = collection.group(1).split("-")[0].strip() if collection else "UNKNOWN"
-        if class_type and class_type in COLLECTION_MAPPING:
-            for orig, new in COLLECTION_MAPPING[class_type].items():
-                if orig.upper() in collection_value.upper():
-                    collection_value = new; break
 
-        # Page 2 colour
-        colour = extract_colour_from_page2(doc[1].get_text(), page_number=2)
+        # --- PAGE 2 colour detection (safe) ---
+        page2_text = doc[1].get_text()
+        colour = extract_colour_from_page2(page2_text, page_number=2)
 
-        # Page 3 / 4 text
+        # --- PAGE 3 / 4 text for price ---
         page3 = doc[2].get_text()
         page4 = doc[3].get_text() if len(doc) > 3 else ""
 
-        # Auto PLN price (PL row)
+        # --- PLN price auto detect ---
         auto_pln_price = _extract_pl_price(page3) or _extract_pl_price(page4)
 
-        # SKUs & Barcodes (from page 3)
+        # --- Extract SKUs & Barcodes (page 3) ---
         skus = re.findall(r"\b\d{8}\b", page3)
-        all_barcodes = re.findall(r"\b\d{13}\b", page3)
-        # exclude "barcode:" meta lines if any
-        excluded = set(re.findall(r"barcode:\s*(\d{13});", page3, re.I))
-        valid_barcodes = [b for b in all_barcodes if b not in excluded]
+        barcodes = re.findall(r"\b\d{13}\b", page3)
 
-        season_value = f"{(season.group(1) or '').strip()}{(season.group(2) or '').strip()}" if season else "UNKNOWN"
+        season_value = season_value or "UNKNOWN"
 
-        result = [({
+        result = [{
             "Order_ID": order_id.group(1).strip() if order_id else "UNKNOWN",
             "Style": style.group() if style else "UNKNOWN",
             "Colour": colour,
@@ -321,20 +330,19 @@ def extract_data_from_pdf(file):
             "Item_classification": item_class_value,
             "Supplier_name": supplier_name.group(1).strip() if supplier_name else "UNKNOWN",
             "today_date": datetime.today().strftime('%d-%m-%Y'),
-            "Collection": collection_value,
-            "Colour_SKU": f"{colour} • SKU {sku}",
-            "Style_Merch_Season": f"STYLE {style.group()} • {collection_value} • Batch No./" if style else "STYLE UNKNOWN",
-            "Batch": f"Data e prodhimit: {batch}",
-            "barcode": barcode,
-            "Item_name_EN": "",  # (optional to add)
-            "Season": season_value
-        }) for sku, barcode in zip(skus, valid_barcodes)]
+            "Collection": collection.group(1).strip() if collection else "UNKNOWN",
+            "Batch": batch,
+            "Season": season_value,
+            "SKU": skus[0] if skus else "",
+            "barcode": barcodes[0] if barcodes else ""
+        }]
 
         return {"data": result, "pln_price": auto_pln_price}
 
     except Exception as e:
         st.error(f"PDF error: {e}")
         return None
+
 
 # ==================== Product name formatter ====================
 def format_product_translations(product_name, translation_row,
@@ -595,6 +603,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
