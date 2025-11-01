@@ -108,34 +108,6 @@ def check_password():
         st.error("Your password Incorrect,  Please contact Mr. Ovi")
     return False
 
-# ==================== PLN PRICE EXTRACTOR ====================
-def _extract_pl_price(text: str):
-    """Robust PLN price extractor for PEPCO OrderSupp PDFs."""
-    try:
-        text = text.replace('\xa0', ' ').replace('\u202f', ' ')
-        text = re.sub(r'\s+', ' ', text)
-        # Find table section first
-        m_table = re.search(
-            r'Country\s+Item\s+name\s+Sales\s+price(.*?)PRODUCT\s+CHARACTERISTIC',
-            text, re.I | re.S
-        )
-        if not m_table:
-            m_table = re.search(r'\bPL[^\n\r]{0,300}', text, re.I | re.S)
-            if m_table:
-                block = m_table.group(0)
-            else:
-                return None
-        else:
-            block = m_table.group(1) if m_table.lastindex else m_table.group(0)
-
-        m_price = re.search(r'\bPL\b[^0-9]{0,40}?(\d{1,4}(?:[.,]\d{2}))', block, re.I)
-        if m_price:
-            return m_price.group(1).replace(',', '.').strip()
-        return None
-    except Exception:
-        return None
-
-
 # ==================== Constants / Mappings ====================
 WASHING_CODES =  {
     '1': '১২৩৪৫', '2': '১৪৭৮৫', '3': 'djnst', '4': 'djnpt', '5': 'djnqt',
@@ -402,7 +374,6 @@ def extract_order_id_only(file):
     return m.group(1).strip() if m else None
 
 
-# ==================== extract_data_from_pdf ====================
 def extract_data_from_pdf(file):
     try:
         doc = fitz.open(stream=file.read(), filetype="pdf")
@@ -412,37 +383,81 @@ def extract_data_from_pdf(file):
 
         page1 = doc[0].get_text()
 
-        # Existing extraction
-        order_id = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*(.+)", page1)
+        # Item name English extraction
+        item_name_en = None
+        m_item = re.search(r"Item\s*name\s*English\s*[:\.]{1,}\s*(.+)", page1, re.IGNORECASE)
+        if not m_item:
+            m_item = re.search(r"Item\s*name\s*[:\.]{1,}\s*(.+?)\n", page1, re.IGNORECASE)
+        if m_item:
+            item_name_en = m_item.group(1).strip()
+
+        merch_code = re.search(r"Merch\s*code\s*\.{2,}\s*([\w/]+)", page1)
         season = re.search(r"Season\s*\.{2,}\s*(\w+)?\s*(\d{2})", page1)
         style_code = re.search(r"\b\d{6}\b", page1)
+
+        style_suffix = ""
+        if merch_code and season:
+            merch_value = merch_code.group(1).strip()
+            season_digits = season.group(2)
+            style_suffix = f"{merch_value}{season_digits}"
+        elif merch_code:
+            style_suffix = merch_code.group(1).strip()
+
+        collection = re.search(r"Collection\s*\.{2,}\s*(.+)", page1)
+        date_match = re.search(r"Handover\s*date\s*\.{2,}\s*(\d{2}/\d{2}/\d{4})", page1)
+        batch = "UNKNOWN"
+        if date_match:
+            try:
+                batch = (datetime.strptime(date_match.group(1), "%d/%m/%Y") - timedelta(days=20)).strftime("%m%Y")
+            except Exception:
+                pass
+
+        order_id = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*(.+)", page1)
         item_class = re.search(r"Item classification\s*\.{2,}\s*(.+)", page1)
         supplier_code = re.search(r"Supplier product code\s*\.{2,}\s*(.+)", page1)
         supplier_name = re.search(r"Supplier name\s*\.{2,}\s*(.+)", page1)
-        collection = re.search(r"Collection\s*\.{2,}\s*(.+)", page1)
 
+        item_class_value = item_class.group(1).strip() if item_class else "UNKNOWN"
+        class_type = get_classification_type(item_class_value)
+        collection_value = collection.group(1).split("-")[0].strip() if collection else "UNKNOWN"
+        if class_type and class_type in COLLECTION_MAPPING:
+            for orig_collection, new_collection in COLLECTION_MAPPING[class_type].items():
+                if orig_collection.upper() in collection_value.upper():
+                    collection_value = new_collection
+                    break
+
+        colour = extract_colour_from_page2(doc[1].get_text())
+        page3 = doc[2].get_text()
+        skus = re.findall(r"\b\d{8}\b", page3)
+        all_barcodes = re.findall(r"\b\d{13}\b", page3)
+        excluded = set(re.findall(r"barcode:\s*(\d{13});", page3))
+        valid_barcodes = [b for b in all_barcodes if b not in excluded]
+
+        # ✅ Season value
         season_value = f"{season.group(1)}{season.group(2)}" if season else "UNKNOWN"
 
-        # ✅ Auto PLN price detection
-        page3 = doc[2].get_text() if len(doc) > 2 else ""
-        page4 = doc[3].get_text() if len(doc) > 3 else ""
-        auto_pln_price = _extract_pl_price(page3) or _extract_pl_price(page4)
-
-        result = [{
+        result = [({
             "Order_ID": order_id.group(1).strip() if order_id else "UNKNOWN",
             "Style": style_code.group() if style_code else "UNKNOWN",
-            "Supplier_name": supplier_name.group(1).strip() if supplier_name else "UNKNOWN",
+            "Colour": colour,
             "Supplier_product_code": supplier_code.group(1).strip() if supplier_code else "UNKNOWN",
-            "Item_classification": item_class.group(1).strip() if item_class else "UNKNOWN",
-            "Collection": collection.group(1).strip() if collection else "UNKNOWN",
-            "Season": season_value,
-            "today_date": datetime.today().strftime('%d-%m-%Y')
-        }]
-        return {"data": result, "pln_price": auto_pln_price}
+            "Item_classification": item_class_value,
+            "Supplier_name": supplier_name.group(1).strip() if supplier_name else "UNKNOWN",
+            "today_date": datetime.today().strftime('%d-%m-%Y'),
+            "Collection": collection_value,
+            "Colour_SKU": f"{colour} • SKU {sku}",
+            "Style_Merch_Season": f"STYLE {style_code.group()} • {style_suffix} • Batch No./" if style_code else "STYLE UNKNOWN",
+            "Batch": f"Data e prodhimit: {batch}",
+            "barcode": barcode,
+            "Item_name_EN": item_name_en or "",
+            "Season": season_value  # ✅ added Season field
+        }) for sku, barcode in zip(skus, valid_barcodes)]
 
+        return result
     except Exception as e:
-        st.error(f"PDF parsing error: {e}")
+        st.error(f"PDF error: {str(e)}")
         return None
+
 
 
 def format_product_translations(product_name, translation_row,
@@ -491,8 +506,10 @@ def format_product_translations(product_name, translation_row,
 
     return " ".join([s for s in formatted if s])
 
+# ==================== Main workflow ====================
+
 def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
-    # ----- Load Reference Sheets -----
+    # ----- Load References -----
     translations_df = load_product_translations()
     material_translations_df = load_material_translations()
     if not (uploaded_pdf and not translations_df.empty):
@@ -502,11 +519,10 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     result_data = extract_data_from_pdf(uploaded_pdf)
     if not result_data:
         return
-    df = pd.DataFrame(result_data["data"])
-    auto_pln = result_data.get("pln_price")  # ✅ auto PLN price detected
+    df = pd.DataFrame(result_data)
 
     # ----- Base Values -----
-    first_row = result_data["data"][0] if len(result_data["data"]) > 0 else {}
+    first_row = result_data[0] if len(result_data) > 0 else {}
     pdf_item_class = first_row.get("Item_classification", "")
     pdf_item_name_en = (first_row.get("Item_name_EN") or "").strip()
 
@@ -550,13 +566,8 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     with c3:
         washing_code_key = st.selectbox("Select Washing Code", options=washing_options, index=washing_default_index, key="ui_wash")
 
-    # ✅ Auto PLN Price field
     with c4:
-        pln_price_raw = st.text_input(
-            "Enter PLN Price (auto-detected from PDF)",
-            value=(auto_pln or ""),
-            key="ui_pln_price"
-        )
+        pln_price_raw = st.text_input("Enter PLN Price", key="ui_pln_price")
 
     # ----- Parse PLN Price -----
     pln_price = None
@@ -644,7 +655,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
     # ----- Material Translation -----
     material_trans_dict, material_compositions = {}, {}
     if selected_materials and not material_translations_df.empty:
-        for lang in ['AL', 'MK']:
+        for lang in ['AL','MK']:
             names, comp = [], []
             for r in valid_rows:
                 t = material_translations_df[
@@ -679,7 +690,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
 
     df['washing_code'] = WASHING_CODES[washing_code_key]
 
-    # ----- Price Ladder + CSV Export -----
+    # ============ Price ladder + CSV Export ============
     if pln_price is not None:
         currency_values = find_closest_price(pln_price)
         if currency_values:
@@ -694,6 +705,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
                 "RSD","HUF","product_name","Dept","Season"
             ]
 
+            # 🧩 Fix: Include Cotton column if exists
             if 'Cotton' in df.columns:
                 final_cols.append("Cotton")
 
@@ -711,6 +723,7 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             for row in edited_df.itertuples(index=False):
                 writer.writerow(row)
 
+            # ---------- Custom CSV Filename ----------
             first_row = df.iloc[0]
             season_val = first_row.get("Season", "UNKNOWN").upper()
             all_skus = df['Colour_SKU'].apply(lambda x: re.sub(r".*SKU\s*", "", x)).tolist()
@@ -728,9 +741,6 @@ def process_pepco_pdf(uploaded_pdf, extra_order_ids: str | None = None):
             )
         else:
             st.warning("⚠️ Processing stopped - valid PLN price not found")
-    else:
-        st.info("ℹ️ Enter a PLN price to compute currency ladder & export.")
-
  
 
 # ==================== Section (Uploader + Reset) ====================
@@ -812,6 +822,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
