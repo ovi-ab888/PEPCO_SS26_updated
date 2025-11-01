@@ -174,32 +174,44 @@ def modify_collection(collection, item_class):
 
 def extract_colour_from_page2(text, page_number=1):
     try:
+        # Split and clean all lines
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+        # Skip words that are never colour names
         skip_keywords = [
             "PURCHASE", "COLOUR", "TOTAL", "PANTONE", "SUPPLIER", "PRICE",
             "ORDERED", "SIZES", "TPG", "TPX", "USD", "NIP", "PEPCO",
             "Poland", "Poznań"
         ]
 
-        # 🔹 size keywords to skip
-        skip_sizes = ["XS", "S", "M", "L", "XL", "XXL", "3XL"]
+        # Skip common size names (expanded)
+        skip_sizes = [
+            "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL",
+            "XXXL", "1XL", "2XL", "2X", "3X", "4X"
+        ]
 
         filtered = []
         for ln in lines:
-            # Skip lines containing unwanted keywords
+            line_clean = ln.strip().upper()
+
+            # Skip lines with unwanted keywords
             if any(k.lower() in ln.lower() for k in skip_keywords):
                 continue
 
-            # Skip lines that are just numbers (1,2,3)
-            if re.match(r"^\s*\d+\s*$", ln):
+            # Skip if only digits (1, 2, 3, etc.)
+            if re.match(r"^\s*\d+\s*$", line_clean):
                 continue
 
-            # Skip lines that are purely numeric/symbols
-            if re.match(r"^[\d\s,./-]+$", ln):
+            # Skip purely numeric or symbol-based lines
+            if re.match(r"^[\d\s,./-]+$", line_clean):
                 continue
 
-            # Skip size names (XS, S, M, L, XL, XXL, 3XL)
-            if ln.strip().upper() in skip_sizes:
+            # Skip known size indicators (XS, XL, 3XL, etc.)
+            if line_clean in skip_sizes:
+                continue
+
+            # Skip patterns like "3 XL", "2XL", "4X"
+            if re.match(r"^\d*\s*[XSML]{1,3}X?L?$", line_clean):
                 continue
 
             filtered.append(ln)
@@ -211,11 +223,13 @@ def extract_colour_from_page2(text, page_number=1):
                 return (manual or "UNKNOWN").upper()
             return colour or "UNKNOWN"
 
+        # If no colour found, show input box
         st.warning(f"⚠️ Page {page_number}: Colour information not found in PDF")
         manual = st.text_input(f"Enter Colour (Page {page_number}):", key=f"colour_missing_{page_number}")
         return (manual or "UNKNOWN").upper()
 
-    except Exception:
+    except Exception as e:
+        st.error(f"Colour extraction error: {e}")
         return "UNKNOWN"
 
 
@@ -581,6 +595,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
