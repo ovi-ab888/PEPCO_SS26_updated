@@ -260,15 +260,13 @@ def _extract_pl_price(text: str):
 # ==================== Core PDF Extractor ====================
 def extract_data_from_pdf(file):
     """
-    Extracts all required data from PEPCO OrderSupp PDF.
-    Handles all regex safely and prevents 'no such group' errors.
+    100% crash-proof version — handles all regex safely.
     """
     try:
-        import fitz
-        import re
+        import fitz, re
         from datetime import datetime, timedelta
+        import traceback
 
-        # --- helper: safe group extraction ---
         def safe_get(match, group=1, default="UNKNOWN"):
             try:
                 if match:
@@ -277,13 +275,11 @@ def extract_data_from_pdf(file):
             except Exception:
                 return default
 
-        # --- open PDF ---
         doc = fitz.open(stream=file.read(), filetype="pdf")
         if len(doc) < 2:
             st.error("PDF must have at least 2 pages.")
             return None
 
-        # --- PAGE 1 text ---
         page1 = doc[0].get_text()
 
         order_id = re.search(r"Order\s*-\s*ID\s*\.{2,}\s*([A-Z0-9_+-]+)", page1)
@@ -294,18 +290,15 @@ def extract_data_from_pdf(file):
         supplier_name = re.search(r"Supplier name\s*\.{2,}\s*(.+)", page1)
         collection = re.search(r"Collection\s*\.{2,}\s*(.+)", page1)
 
-        # --- Season safe extraction ---
+        # --- Season ---
         try:
-            if season:
-                part1 = season.group(1) if season.lastindex and season.lastindex >= 1 else ""
-                part2 = season.group(2) if season.lastindex and season.lastindex >= 2 else ""
-                season_value = f"{(part1 or '')}{(part2 or '')}".strip() or "UNKNOWN"
-            else:
-                season_value = "UNKNOWN"
+            part1 = season.group(1) if season and season.lastindex >= 1 else ""
+            part2 = season.group(2) if season and season.lastindex >= 2 else ""
+            season_value = (part1 + part2).strip() or "UNKNOWN"
         except Exception:
             season_value = "UNKNOWN"
 
-        # --- Date → Batch (optional) ---
+        # --- Date ---
         date_m = re.search(r"Handover\s*date\s*\.{2,}\s*(\d{2}/\d{2}/\d{4})", page1)
         batch = "UNKNOWN"
         if date_m:
@@ -314,39 +307,29 @@ def extract_data_from_pdf(file):
             except Exception:
                 pass
 
-        # --- PAGE 2 Colour extraction ---
+        # --- Page 2 colour ---
         page2_text = doc[1].get_text()
         colour = extract_colour_from_page2(page2_text, page_number=2)
 
-        # --- PAGE 3 & 4 for PLN price ---
+        # --- Pages 3–4 for price ---
         page3 = doc[2].get_text() if len(doc) > 2 else ""
         page4 = doc[3].get_text() if len(doc) > 3 else ""
-
-        # --- Auto PLN price detection ---
         auto_pln_price = _extract_pl_price(page3) or _extract_pl_price(page4)
 
-        # --- Extract SKUs & Barcodes ---
-        skus = re.findall(r"\b\d{8}\b", page3 + page4)
-        barcodes = re.findall(r"\b\d{13}\b", page3 + page4)
+        # --- SKU & barcode ---
+        combined_text = page3 + page4
+        skus = re.findall(r"\b\d{8}\b", combined_text)
+        barcodes = re.findall(r"\b\d{13}\b", combined_text)
 
-        # --- safe field extraction ---
-        order_id_value = safe_get(order_id)
-        style_value = safe_get(style, 0)
-        item_class_value = safe_get(item_class)
-        supplier_code_value = safe_get(supplier_code)
-        supplier_name_value = safe_get(supplier_name)
-        collection_value = safe_get(collection)
-
-        # --- Final structured result ---
         result = [{
-            "Order_ID": order_id_value,
-            "Style": style_value,
+            "Order_ID": safe_get(order_id),
+            "Style": safe_get(style, 0),
             "Colour": colour,
-            "Supplier_product_code": supplier_code_value,
-            "Item_classification": item_class_value,
-            "Supplier_name": supplier_name_value,
+            "Supplier_product_code": safe_get(supplier_code),
+            "Item_classification": safe_get(item_class),
+            "Supplier_name": safe_get(supplier_name),
             "today_date": datetime.today().strftime('%d-%m-%Y'),
-            "Collection": collection_value,
+            "Collection": safe_get(collection),
             "Batch": batch,
             "Season": season_value,
             "SKU": skus[0] if skus else "",
@@ -356,9 +339,10 @@ def extract_data_from_pdf(file):
         return {"data": result, "pln_price": auto_pln_price}
 
     except Exception as e:
+        import traceback
         st.error(f"PDF error: {e}")
+        st.text(traceback.format_exc())
         return None
-
 
 
 # ==================== Product name formatter ====================
@@ -620,6 +604,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
